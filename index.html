@@ -124,7 +124,7 @@
 
   <div class="panel" id="p-paste">
     <p class="help">Paste anything with structure: a table copied from a website or Excel, comma separated text, or lines with columns. The extractor figures out the separators.</p>
-    <textarea id="pasteInput" placeholder="Paste your table or text here..."></textarea>
+    <textarea id="pasteInput" placeholder="Paste your table or text here... (or drag a .csv or .txt file onto this box)"></textarea>
     <button class="btn" id="pasteBtn">Extract from paste</button>
     <button class="btn" id="exampleBtn" style="background:#888;">Show me an example</button>
     <div class="status" id="pasteStatus"></div>
@@ -171,6 +171,7 @@
       <button class="tbtn" id="colsBtn" title="Choose which columns to keep">▦ Columns</button>
       <input type="url" id="filterInput" placeholder="Filter rows containing..." style="max-width:220px;padding:8px;font-size:0.85rem;">
       <button class="tbtn" id="undoBtn" title="Undo the last change">↶ Undo</button>
+      <button class="tbtn" id="summaryBtn" title="Quick quality check of every column">📊 Column summary</button>
       <span class="stat" id="stat"></span>
     </div>
     <div id="colBox"></div>
@@ -279,11 +280,15 @@ function updateStat() {
   const total = rows.length - 1;
   const cols = (rows[0] || []).length - hiddenCols.size;
   document.getElementById("stat").textContent =
-    (shown === total ? total + " rows" : shown + " of " + total + " rows") + " · " + cols + " columns";
+    (shown === total ? total + " rows" : shown + " of " + total + " rows") + " · " + cols + " columns" +
+    (window._capped ? "  (showing first " + RENDER_CAP + " on screen — downloads include all " + window._capped + ")" : "");
 }
 
+const RENDER_CAP = 500;
 function renderTable(i) {
-  const rows = viewRows();
+  const all = viewRows();
+  const rows = all.length > RENDER_CAP + 1 ? [all[0]].concat(all.slice(1, RENDER_CAP + 1)) : all;
+  window._capped = all.length > RENDER_CAP + 1 ? all.length - 1 : 0;
   const tbl = document.getElementById("outTable");
   tbl.innerHTML = "";
   rows.forEach((r, ri) => {
@@ -358,6 +363,37 @@ document.getElementById("colsBtn").addEventListener("click", () => {
   box.style.display = "block";
 });
 
+
+
+/* ================= column summary (iteration 5) ================= */
+function columnSummary(rows) {
+  const head = rows[0] || [], body = rows.slice(1);
+  const out = [["Column", "Filled", "Empty", "Unique values", "Looks like"]];
+  head.forEach((name, c) => {
+    const vals = body.map(r => String(r[c] ?? "").trim());
+    const filled = vals.filter(v => v !== "");
+    const uniq = new Set(filled).size;
+    const isNum = v => v !== "" && !isNaN(parseFloat(v.replace(/[$,%\s]/g, "")));
+    const isEmail = v => /^[^@\s]+@[^@\s]+\.[A-Za-z]{2,}$/.test(v);
+    const isDate = v => /^\d{4}-\d{2}-\d{2}$/.test(v) || /^\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4}$/.test(v);
+    const share = f => filled.length ? filled.filter(f).length / filled.length : 0;
+    let kind = "text";
+    if (share(isEmail) > 0.7) kind = "email";
+    else if (share(isDate) > 0.7) kind = "date";
+    else if (share(isNum) > 0.7) kind = "number";
+    if (filled.length && uniq === filled.length) kind += " · all unique";
+    else if (filled.length && uniq <= 5) kind += " · " + uniq + " categories";
+    out.push([name || "column " + (c + 1), String(filled.length), String(vals.length - filled.length), String(uniq), kind]);
+  });
+  return out;
+}
+
+document.getElementById("summaryBtn").addEventListener("click", () => {
+  if (!tables.length) return;
+  const src = curRows();
+  showTables([{name: "Column summary", rows: columnSummary(src)}].concat(tables), "column summary");
+  setStatus("pasteStatus", "Column summary built. Check Empty counts for gaps, and Looks like to spot a column that should be numbers but is not.");
+});
 
 /* ================= exports (iteration 2) ================= */
 function esc(s){ return String(s ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
@@ -615,6 +651,24 @@ document.getElementById("pasteBtn").addEventListener("click", () => {
     setStatus("pasteStatus", "Could not find structure in that text.", true);
   }
 });
+
+
+/* drag a CSV or TXT straight onto the paste box */
+(function(){
+  const ta = document.getElementById("pasteInput");
+  if (!ta) return;
+  ta.addEventListener("dragover", e => { e.preventDefault(); ta.style.borderColor = "var(--orange)"; });
+  ta.addEventListener("dragleave", () => ta.style.borderColor = "");
+  ta.addEventListener("drop", async e => {
+    e.preventDefault(); ta.style.borderColor = "";
+    const f = e.dataTransfer.files[0];
+    if (!f) return;
+    if (/\.pdf$/i.test(f.name)) return setStatus("pasteStatus", "That is a PDF — use the From a PDF tab for it.", true);
+    ta.value = await f.text();
+    document.getElementById("pasteBtn").click();
+    setStatus("pasteStatus", "Loaded " + f.name + " and extracted it.");
+  });
+})();
 
 document.getElementById("exampleBtn").addEventListener("click", () => {
   document.getElementById("pasteInput").value =
