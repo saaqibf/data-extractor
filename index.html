@@ -96,7 +96,7 @@
       <li><b>Check the table</b> that appears below.</li>
       <li><b>Click "Download CSV"</b> and open it in Excel or Google Sheets. Done.</li>
       <li><b>Messy table?</b> Use <b>🧹 Clean up</b> to trim spaces and drop blank or duplicate rows, click a column heading to sort, or use <b>▦ Columns</b> to hide what you do not need. You can also type straight into a cell to fix it.</li>
-      <li><b>Looking for something specific?</b> Use the <b>🔎 Find specific things</b> tab to pull out every email, phone number, link, dollar amount or date, or search for any word you want.</li>
+      <li><b>Looking for something specific?</b> Use the <b>🔎 Find specific things</b> tab to pull out every email, phone number, link, dollar amount or date, or search for any word you want. <b>👤 Contact list</b> turns a messy page or email thread into a Name + Email table ready for a mail merge, and you can copy every address or drop them straight into BCC.</li>
     </ol>
     <div style="font-size:0.82rem;color:#555;">Not sure? Click <b>"Show me an example"</b> in the Paste anything tab and watch it work. Nothing you put here leaves your computer.</div>
   </div>
@@ -141,11 +141,17 @@
       <button class="btn" data-find="money" style="margin-top:0;">💲 Dollar amounts</button>
       <button class="btn" data-find="date" style="margin-top:0;">📅 Dates</button>
       <button class="btn" data-find="postal" style="margin-top:0;">📮 Postal codes</button>
+      <button class="btn orange" data-find="contacts" style="margin-top:0;">👤 Contact list (name + email)</button>
     </div>
     <div style="margin-top:16px;font-size:0.88rem;font-weight:600;color:var(--purple);">2. Or search for your own word or phrase</div>
     <div class="row-actions" style="margin-top:8px;">
       <input type="url" id="keywordInput" placeholder="e.g. drone, Calgary, deadline, Sabina" style="max-width:320px;">
       <button class="btn orange" id="keywordBtn" style="margin-top:0;">Search</button>
+    </div>
+    <div style="margin-top:16px;font-size:0.88rem;font-weight:600;color:var(--purple);">3. Turn found emails into something you can use</div>
+    <div class="row-actions" style="margin-top:8px;">
+      <button class="btn" id="mailtoBtn" style="margin-top:0;background:#666;">✉️ Copy all emails (comma separated)</button>
+      <button class="btn" id="bccBtn" style="margin-top:0;background:#666;">📨 Open in my email app (BCC)</button>
     </div>
     <div class="status" id="findStatus"></div>
   </div>
@@ -618,6 +624,81 @@ document.getElementById("exampleBtn").addEventListener("click", () => {
 });
 
 
+
+/* ================= contacts + email helpers (iteration 4) ================= */
+const EMAIL_RE = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
+
+function guessName(line, email) {
+  const STOP = /\b(from|to|cc|bcc|sent|subject|date|re|fwd|mailto|email|e-?mail|contact|phone|tel|cell|office|at|and|the|please|loop|about|regarding|hi|hello|dear|thanks|regards|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/gi;
+  const INIT = "\u0001";                                   // placeholder so "J." is not a sentence end
+  const protect = t => t.replace(/\b([A-Z])\.(?=\s)/g, "$1" + INIT);
+  const restore = t => t.split(INIT).join(".");
+  const lastSentence = t => { const parts = protect(t).split(/[.!?]\s+/); return restore(parts[parts.length - 1]); };
+  const clean = t => t.replace(/[<>()\[\];|,]/g, " ").replace(STOP, " ")
+                      .replace(/[-–—:]+/g, " ").replace(/\s+/g, " ").trim();
+  const NAME = /\b(?:[A-Z]\.|[A-Z][a-zA-Z'’-]+)(?:\s+(?:[A-Z]\.|[A-Z][a-zA-Z'’-]+)){0,3}\b/g;
+  const namey = t => {
+    const m = clean(t).match(NAME);
+    if (!m) return null;
+    const multi = m.filter(x => x.trim().split(/\s+/).length >= 2);
+    const pool = multi.length ? multi : m;
+    return pool[pool.length - 1].trim();                    // the one closest to the address
+  };
+  const i = line.indexOf(email);
+  let g = namey(lastSentence(line.slice(Math.max(0, i - 60), i)));
+  if (g) return g;
+  g = namey(protect(line.slice(i + email.length, i + email.length + 40)).split(/[.!?]\s+/)[0]);
+  if (g) return restore(g);
+  const local = email.split("@")[0].replace(/[._+-]+/g, " ").replace(/\d+/g, "").trim();
+  return local ? local.replace(/\b\w/g, c => c.toUpperCase()) : "";
+}
+
+function buildContacts(text) {
+  const lines = text.split(/\r?\n/);
+  const seen = new Set();
+  const rows = [["Name", "Email", "Organization guess", "Line"]];
+  lines.forEach((line, n) => {
+    const hits = line.match(EMAIL_RE) || [];
+    hits.forEach(em => {
+      const key = em.toLowerCase();
+      if (seen.has(key)) return;
+      seen.add(key);
+      const domain = em.split("@")[1] || "";
+      const org = domain.split(".").slice(0, -1).join(".");
+      rows.push([guessName(line, em), em, org, String(n + 1)]);
+    });
+  });
+  return rows;
+}
+
+function currentEmails() {
+  // prefer emails from the table on screen, else scan the Find box
+  let list = [];
+  if (tables.length) {
+    viewRows().forEach(r => r.forEach(c => (String(c).match(EMAIL_RE) || []).forEach(e => list.push(e))));
+  }
+  if (!list.length) {
+    const t = document.getElementById("findInput").value || "";
+    list = t.match(EMAIL_RE) || [];
+  }
+  return [...new Set(list.map(e => e.trim()))];
+}
+
+document.getElementById("mailtoBtn").addEventListener("click", async () => {
+  const list = currentEmails();
+  if (!list.length) return setStatus("findStatus", "No email addresses found yet. Paste text above or run Contact list first.", true);
+  await navigator.clipboard.writeText(list.join(", "));
+  setStatus("findStatus", "Copied " + list.length + " address(es). Paste straight into the To or BCC box of your email.");
+});
+
+document.getElementById("bccBtn").addEventListener("click", () => {
+  const list = currentEmails();
+  if (!list.length) return setStatus("findStatus", "No email addresses found yet. Paste text above or run Contact list first.", true);
+  if (list.length > 90) return setStatus("findStatus", "That is " + list.length + " addresses, too many for one mail link. Use Copy all emails instead and paste into BCC.", true);
+  window.location.href = "mailto:?bcc=" + encodeURIComponent(list.join(","));
+  setStatus("findStatus", "Opening your email app with " + list.length + " address(es) in BCC. Nothing is sent until you press send.");
+});
+
 /* ---------- Find specific things ---------- */
 const FINDERS = {
   email: {label: "Email addresses", re: /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g},
@@ -631,6 +712,12 @@ const FINDERS = {
 function runFinder(kind) {
   const text = document.getElementById("findInput").value;
   if (!text.trim()) return setStatus("findStatus", "Paste some text above first.", true);
+  if (kind === "contacts") {
+    const rows = buildContacts(text);
+    if (rows.length === 1) return setStatus("findStatus", "No email addresses found in that text.", true);
+    showTables([{name: "Contacts", rows}], "contact list");
+    return setStatus("findStatus", "Built a contact list of " + (rows.length - 1) + " people. Check the names, fix any in the table, then Download CSV or Excel for a mail merge.");
+  }
   const f = FINDERS[kind];
   const hits = [...new Set((text.match(f.re) || []).map(s => s.trim()))];
   if (!hits.length) return setStatus("findStatus", "No " + f.label.toLowerCase() + " found in that text.", true);
