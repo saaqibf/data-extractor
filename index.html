@@ -63,6 +63,18 @@
   tr:nth-child(even) { background: #f7f4fc; }
   .row-actions { display: flex; gap: 10px; align-items: center; margin-top: 14px; flex-wrap: wrap; }
   select { padding: 8px; border-radius: 8px; border: 1.5px solid #d5cce8; font-size: 0.88rem; }
+  .toolbar { display:flex; flex-wrap:wrap; gap:8px; align-items:center; background:#fff; border-radius:10px;
+    padding:12px 14px; margin-top:12px; box-shadow:0 2px 10px rgba(95,85,201,0.08); }
+  .tbtn { padding:8px 14px; border:1.5px solid #d5cce8; background:#fff; color:var(--purple);
+    border-radius:20px; font-size:0.82rem; font-weight:600; cursor:pointer; }
+  .tbtn:hover { background:#efe9fa; }
+  .tbtn.on { background:var(--purple); color:#fff; border-color:var(--purple); }
+  .stat { font-size:0.8rem; color:#666; margin-left:auto; }
+  #colBox { display:none; background:#fff; border-radius:10px; padding:12px 14px; margin-top:8px;
+    box-shadow:0 2px 10px rgba(95,85,201,0.08); font-size:0.85rem; }
+  #colBox label { display:inline-block; margin:4px 14px 4px 0; cursor:pointer; }
+  th.sortable { cursor:pointer; user-select:none; }
+  th.sortable:hover { background:var(--purple-light); }
   footer { text-align: center; padding: 26px; font-size: 0.78rem; color: #888; }
 </style>
 </head>
@@ -83,6 +95,7 @@
       <li><b>Get your data in:</b> drop a PDF on the "From a PDF" tab, or copy a table from any website or Excel and paste it in "Paste anything." (The URL tab works on some sites; if a site blocks it, the paste tab always works.)</li>
       <li><b>Check the table</b> that appears below.</li>
       <li><b>Click "Download CSV"</b> and open it in Excel or Google Sheets. Done.</li>
+      <li><b>Messy table?</b> Use <b>🧹 Clean up</b> to trim spaces and drop blank or duplicate rows, click a column heading to sort, or use <b>▦ Columns</b> to hide what you do not need. You can also type straight into a cell to fix it.</li>
       <li><b>Looking for something specific?</b> Use the <b>🔎 Find specific things</b> tab to pull out every email, phone number, link, dollar amount or date, or search for any word you want.</li>
     </ol>
     <div style="font-size:0.82rem;color:#555;">Not sure? Click <b>"Show me an example"</b> in the Paste anything tab and watch it work. Nothing you put here leaves your computer.</div>
@@ -102,9 +115,9 @@
   </div>
 
   <div class="panel" id="p-pdf">
-    <p class="help">Drop a PDF here or click to choose one. The extractor reads the text and rebuilds the rows and columns. Works best on PDFs where the table is real text (most reports), not a scanned photo.</p>
-    <div class="drop" id="dropZone">Drop PDF here or click to browse
-      <input type="file" id="pdfInput" accept="application/pdf" style="display:none">
+    <p class="help">Drop one PDF or several at once. The extractor reads the text and rebuilds rows and columns. If the pages share the same columns it also builds a combined table, and if you drop several files it merges them and flags any duplicate rows. Works best on PDFs where the table is real text (most reports), not a scanned photo.</p>
+    <div class="drop" id="dropZone">Drop one or more PDFs here, or click to browse
+      <input type="file" id="pdfInput" accept="application/pdf" multiple style="display:none">
     </div>
     <div class="status" id="pdfStatus"></div>
   </div>
@@ -142,8 +155,19 @@
     <div class="row-actions">
       <label style="font-size:0.86rem;">Table found: <select id="tablePick"></select></label>
       <button class="btn orange" id="csvBtn">Download CSV</button>
+      <button class="btn" id="xlsBtn" style="background:#217346;">Download Excel</button>
       <button class="btn" id="copyBtn" style="background:#666;">Copy to clipboard</button>
+      <button class="btn" id="mdBtn" style="background:#666;">Copy as Markdown</button>
     </div>
+    <div class="toolbar">
+      <button class="tbtn" id="cleanBtn" title="Remove blank rows and columns, trim spaces, drop duplicate rows">🧹 Clean up</button>
+      <button class="tbtn" id="headerBtn" title="Use the first row as column names">⬆️ First row = headers</button>
+      <button class="tbtn" id="colsBtn" title="Choose which columns to keep">▦ Columns</button>
+      <input type="url" id="filterInput" placeholder="Filter rows containing..." style="max-width:220px;padding:8px;font-size:0.85rem;">
+      <button class="tbtn" id="undoBtn" title="Undo the last change">↶ Undo</button>
+      <span class="stat" id="stat"></span>
+    </div>
+    <div id="colBox"></div>
     <div class="table-scroll" style="margin-top:12px;"><table id="outTable"></table></div>
   </div>
 </div>
@@ -180,27 +204,206 @@ function showTables(list, sourceName) {
     o.textContent = t.name + " (" + t.rows.length + " rows)";
     pick.appendChild(o);
   });
-  pick.onchange = () => renderTable(+pick.value);
+  pick.onchange = () => { hiddenCols.clear(); sortState={col:null,dir:1}; filterText=''; document.getElementById('filterInput').value=''; renderTable(+pick.value); };
   document.getElementById("resultTitle").textContent = "Extracted from " + sourceName;
   document.getElementById("result").style.display = "block";
+  hist = []; hiddenCols.clear(); sortState = {col:null, dir:1}; filterText = "";
+  const fi2 = document.getElementById("filterInput"); if (fi2) fi2.value = "";
   renderTable(0);
   document.getElementById("result").scrollIntoView({behavior:"smooth"});
   return true;
 }
 
+
+/* ================= table tools (iteration 1) ================= */
+let hist = [];               // undo stack of row-arrays
+let hiddenCols = new Set();
+let sortState = {col: null, dir: 1};
+let filterText = "";
+
+function curIdx() { return +document.getElementById("tablePick").value || 0; }
+function curRows() { return tables[curIdx()].rows; }
+function pushHist() { hist.push(JSON.parse(JSON.stringify(curRows()))); if (hist.length > 25) hist.shift(); }
+
+function cleanRows(rows) {
+  // trim every cell
+  let out = rows.map(r => r.map(c => String(c ?? "").replace(/\s+/g, " ").trim()));
+  // drop fully-empty rows
+  out = out.filter(r => r.some(c => c !== ""));
+  // drop fully-empty columns (checked against every row)
+  const width = Math.max(...out.map(r => r.length));
+  out = out.map(r => r.concat(Array(Math.max(0, width - r.length)).fill("")));
+  const keep = [];
+  for (let c = 0; c < width; c++) if (out.some(r => (r[c] ?? "") !== "")) keep.push(c);
+  out = out.map(r => keep.map(c => r[c]));
+  // drop duplicate rows, keeping the first (header row always survives)
+  const seen = new Set(); const dedup = [];
+  out.forEach((r, i) => {
+    const key = r.join("\u0001");
+    if (i === 0 || !seen.has(key)) { seen.add(key); dedup.push(r); }
+  });
+  return dedup;
+}
+
+function viewRows() {
+  let rows = curRows();
+  const head = rows[0] || [];
+  let body = rows.slice(1);
+  if (filterText) {
+    const f = filterText.toLowerCase();
+    body = body.filter(r => r.some(c => String(c).toLowerCase().includes(f)));
+  }
+  if (sortState.col !== null) {
+    const c = sortState.col;
+    body = body.slice().sort((a, b) => {
+      const x = a[c] ?? "", y = b[c] ?? "";
+      const nx = parseFloat(String(x).replace(/[$,\s]/g, "")), ny = parseFloat(String(y).replace(/[$,\s]/g, ""));
+      const bothNum = !isNaN(nx) && !isNaN(ny);
+      const cmp = bothNum ? nx - ny : String(x).localeCompare(String(y));
+      return cmp * sortState.dir;
+    });
+  }
+  const all = [head].concat(body);
+  return all.map(r => r.filter((_, i) => !hiddenCols.has(i)));
+}
+
+function updateStat() {
+  const rows = curRows();
+  const shown = viewRows().length - 1;
+  const total = rows.length - 1;
+  const cols = (rows[0] || []).length - hiddenCols.size;
+  document.getElementById("stat").textContent =
+    (shown === total ? total + " rows" : shown + " of " + total + " rows") + " · " + cols + " columns";
+}
+
 function renderTable(i) {
-  const rows = tables[i].rows;
+  const rows = viewRows();
   const tbl = document.getElementById("outTable");
   tbl.innerHTML = "";
   rows.forEach((r, ri) => {
     const tr = document.createElement("tr");
-    r.forEach(c => {
+    r.forEach((c, ci) => {
       const cell = document.createElement(ri === 0 ? "th" : "td");
       cell.textContent = c;
+      if (ri === 0) {
+        cell.className = "sortable";
+        const real = [...Array((curRows()[0] || []).length).keys()].filter(x => !hiddenCols.has(x))[ci];
+        if (sortState.col === real) cell.textContent = c + (sortState.dir === 1 ? "  ▲" : "  ▼");
+        cell.onclick = () => {
+          sortState = {col: real, dir: sortState.col === real ? -sortState.dir : 1};
+          renderTable(curIdx());
+        };
+      } else {
+        cell.contentEditable = "true";
+        cell.onblur = () => {
+          const realCols = [...Array((curRows()[0] || []).length).keys()].filter(x => !hiddenCols.has(x));
+          const src = curRows();
+          // only safe to write back when not filtered or sorted
+          if (!filterText && sortState.col === null) { pushHist(); src[ri][realCols[ci]] = cell.textContent; updateStat(); }
+        };
+      }
       tr.appendChild(cell);
     });
     tbl.appendChild(tr);
   });
+  updateStat();
+}
+
+document.getElementById("cleanBtn").addEventListener("click", () => {
+  pushHist();
+  const before = curRows().length;
+  tables[curIdx()].rows = cleanRows(curRows());
+  hiddenCols.clear();
+  renderTable(curIdx());
+  const removed = before - curRows().length;
+  setStatus("pasteStatus", "Cleaned: trimmed spaces, removed " + removed + " blank or duplicate row(s), dropped empty columns.");
+});
+
+document.getElementById("headerBtn").addEventListener("click", () => {
+  pushHist();
+  const rows = curRows();
+  if (rows.length > 1) { tables[curIdx()].rows = rows.slice(1); }
+  renderTable(curIdx());
+});
+
+document.getElementById("undoBtn").addEventListener("click", () => {
+  if (!hist.length) return;
+  tables[curIdx()].rows = hist.pop();
+  renderTable(curIdx());
+});
+
+document.getElementById("filterInput").addEventListener("input", e => {
+  filterText = e.target.value.trim();
+  renderTable(curIdx());
+});
+
+document.getElementById("colsBtn").addEventListener("click", () => {
+  const box = document.getElementById("colBox");
+  if (box.style.display === "block") { box.style.display = "none"; return; }
+  const head = curRows()[0] || [];
+  box.innerHTML = "<b style='color:var(--purple)'>Show columns:</b><br>" + head.map((hname, i) =>
+    `<label><input type="checkbox" data-col="${i}" ${hiddenCols.has(i) ? "" : "checked"}> ${hname || "column " + (i+1)}</label>`
+  ).join("");
+  box.querySelectorAll("input[data-col]").forEach(cb => cb.addEventListener("change", () => {
+    const c = +cb.dataset.col;
+    cb.checked ? hiddenCols.delete(c) : hiddenCols.add(c);
+    renderTable(curIdx());
+  }));
+  box.style.display = "block";
+});
+
+
+/* ================= exports (iteration 2) ================= */
+function esc(s){ return String(s ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+
+document.getElementById("xlsBtn").addEventListener("click", () => {
+  const rows = viewRows();
+  const html = "<html><head><meta charset='utf-8'></head><body><table border='1'>" +
+    rows.map((r, i) => "<tr>" + r.map(c =>
+      i === 0 ? "<th style='background:#5F55C9;color:#fff'>" + esc(c) + "</th>" : "<td>" + esc(c) + "</td>"
+    ).join("") + "</tr>").join("") + "</table></body></html>";
+  const blob = new Blob(["\ufeff" + html], {type: "application/vnd.ms-excel"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "extracted-data.xls";
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+
+function toMarkdown(rows) {
+  if (!rows.length) return "";
+  const head = rows[0], body = rows.slice(1);
+  return "| " + head.join(" | ") + " |\n| " + head.map(() => "---").join(" | ") + " |\n" +
+    body.map(r => "| " + r.join(" | ") + " |").join("\n");
+}
+
+document.getElementById("mdBtn").addEventListener("click", async () => {
+  await navigator.clipboard.writeText(toMarkdown(viewRows()));
+  const b = document.getElementById("mdBtn");
+  b.textContent = "Copied!"; setTimeout(() => b.textContent = "Copy as Markdown", 1500);
+});
+
+/* Stitch PDF pages that share the same column count into one continuous table */
+function stitchPages(pages) {
+  if (pages.length < 2) return pages;
+  const widthOf = p => {
+    const counts = {};
+    p.rows.forEach(r => counts[r.length] = (counts[r.length] || 0) + 1);
+    return +Object.entries(counts).sort((a,b) => b[1]-a[1])[0][0];
+  };
+  const w0 = widthOf(pages[0]);
+  if (w0 < 2) return pages;
+  const sameShape = pages.every(p => widthOf(p) === w0);
+  if (!sameShape) return pages;
+  const header = pages[0].rows[0];
+  let all = pages[0].rows.slice();
+  for (let i = 1; i < pages.length; i++) {
+    let rows = pages[i].rows;
+    // if a later page repeats the header, drop it
+    if (rows.length && rows[0].join("|") === header.join("|")) rows = rows.slice(1);
+    all = all.concat(rows);
+  }
+  return [{name: "All " + pages.length + " pages combined", rows: all}].concat(pages);
 }
 
 /* ---------- CSV out ---------- */
@@ -223,7 +426,7 @@ document.getElementById("csvBtn").addEventListener("click", () => {
 
 document.getElementById("copyBtn").addEventListener("click", async () => {
   const i = +document.getElementById("tablePick").value || 0;
-  await navigator.clipboard.writeText(tables[i].rows.map(r => r.join("\t")).join("\n"));
+  await navigator.clipboard.writeText(viewRows().map(r => r.join("\t")).join("\n"));
   document.getElementById("copyBtn").textContent = "Copied!";
   setTimeout(() => document.getElementById("copyBtn").textContent = "Copy to clipboard", 1500);
 });
@@ -300,32 +503,59 @@ dropZone.addEventListener("dragover", e => { e.preventDefault(); dropZone.classL
 dropZone.addEventListener("dragleave", () => dropZone.classList.remove("drag"));
 dropZone.addEventListener("drop", e => {
   e.preventDefault(); dropZone.classList.remove("drag");
-  if (e.dataTransfer.files[0]) handlePDF(e.dataTransfer.files[0]);
+  if (e.dataTransfer.files.length) handlePDFs(e.dataTransfer.files);
 });
-pdfInput.addEventListener("change", () => pdfInput.files[0] && handlePDF(pdfInput.files[0]));
+pdfInput.addEventListener("change", () => pdfInput.files.length && handlePDFs(pdfInput.files));
 
-async function handlePDF(file) {
-  setStatus("pdfStatus", "Reading " + file.name + "...");
-  try {
-    const buf = await file.arrayBuffer();
-    const pdf = await pdfjsLib.getDocument({data: buf}).promise;
-    const found = [];
-    for (let p = 1; p <= pdf.numPages; p++) {
-      const page = await pdf.getPage(p);
-      const content = await page.getTextContent();
-      const rows = itemsToRows(content.items);
-      if (rows.length > 1) found.push({name: "Page " + p, rows});
+async function handlePDFs(files) {
+  const list = [...files];
+  setStatus("pdfStatus", "Reading " + list.length + " file(s)...");
+  let allTables = [];
+  let allText = [];
+  for (const file of list) {
+    try {
+      const buf = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({data: buf}).promise;
+      const pages = [];
+      for (let p = 1; p <= pdf.numPages; p++) {
+        const page = await pdf.getPage(p);
+        const content = await page.getTextContent();
+        const rows = itemsToRows(content.items);
+        if (rows.length > 1) pages.push({name: file.name + " p" + p, rows});
+      }
+      allText.push("=== " + file.name + " ===\n" + pages.map(p => p.rows.map(r => r.join(" ")).join("\n")).join("\n"));
+      const stitched = stitchPages(pages);
+      if (stitched.length > pages.length) {
+        stitched[0].name = file.name + " (all pages)";
+        allTables.push(stitched[0]);
+      }
+      allTables = allTables.concat(pages);
+    } catch (e) {
+      setStatus("pdfStatus", "Could not read " + file.name + ": " + e.message, true);
     }
-    window._lastPdfText = found.map(p => p.rows.map(r => r.join(" ")).join("\n")).join("\n");
-    const fi = document.getElementById("findInput"); if (fi) fi.value = window._lastPdfText;
-    if (showTables(found, file.name)) {
-      setStatus("pdfStatus", "Extracted " + found.length + " page(s) with table-like content.");
-    } else {
-      setStatus("pdfStatus", "No table-like text found. If this PDF is a scanned image, the text is not readable this way.", true);
-    }
-  } catch (e) {
-    setStatus("pdfStatus", "Could not read that PDF: " + e.message, true);
   }
+  if (!allTables.length) {
+    return setStatus("pdfStatus", "No table-like text found. If these are scanned images, the text is not readable this way.", true);
+  }
+  // merge same-shape "all pages" tables across files
+  const fileWide = allTables.filter(t => t.name.includes("(all pages)"));
+  if (fileWide.length > 1) {
+    const w = fileWide[0].rows[0].length;
+    if (fileWide.every(t => t.rows[0].length === w)) {
+      const header = fileWide[0].rows[0];
+      let merged = [header];
+      const seen = new Set(); let dupes = 0;
+      fileWide.forEach(t => t.rows.slice(1).forEach(r => {
+        const k = r.join("\u0001");
+        if (seen.has(k)) { dupes++; } else { seen.add(k); merged.push(r); }
+      }));
+      allTables.unshift({name: "ALL " + fileWide.length + " FILES merged" + (dupes ? " (" + dupes + " duplicate rows removed)" : ""), rows: merged});
+    }
+  }
+  window._lastPdfText = allText.join("\n\n");
+  const fi = document.getElementById("findInput"); if (fi) fi.value = window._lastPdfText;
+  showTables(allTables, list.length === 1 ? list[0].name : list.length + " files");
+  setStatus("pdfStatus", "Extracted " + allTables.length + " table(s) from " + list.length + " file(s). Their text is in the \ud83d\udd0e Find tab too.");
 }
 
 /* Group PDF text items into rows by vertical position, columns by horizontal gaps */
