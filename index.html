@@ -83,6 +83,7 @@
       <li><b>Get your data in:</b> drop a PDF on the "From a PDF" tab, or copy a table from any website or Excel and paste it in "Paste anything." (The URL tab works on some sites; if a site blocks it, the paste tab always works.)</li>
       <li><b>Check the table</b> that appears below.</li>
       <li><b>Click "Download CSV"</b> and open it in Excel or Google Sheets. Done.</li>
+      <li><b>Looking for something specific?</b> Use the <b>🔎 Find specific things</b> tab to pull out every email, phone number, link, dollar amount or date, or search for any word you want.</li>
     </ol>
     <div style="font-size:0.82rem;color:#555;">Not sure? Click <b>"Show me an example"</b> in the Paste anything tab and watch it work. Nothing you put here leaves your computer.</div>
   </div>
@@ -90,10 +91,11 @@
     <button class="tab active" data-panel="p-url">From a web page</button>
     <button class="tab" data-panel="p-pdf">From a PDF</button>
     <button class="tab" data-panel="p-paste">Paste anything</button>
+    <button class="tab" data-panel="p-find">🔎 Find specific things</button>
   </div>
 
   <div class="panel active" id="p-url">
-    <p class="help">Paste the address of a page that has a table on it, then press Extract. If the website blocks direct reading (some do, for security), copy the page content instead and use the Paste anything tab. That always works.</p>
+    <p class="help">Paste any web address and press Extract. The tool tries three different ways to read the page, so most sites work. If a page has tables, you get the tables. If it does not, you get the readable text, and it is loaded into the 🔎 Find tab automatically so you can pull out emails, links, amounts or any word you want. If a site blocks every route, copy the part you want and use the Paste anything tab.</p>
     <input type="url" id="urlInput" placeholder="https://example.com/page-with-a-table">
     <button class="btn" id="urlBtn">Extract from URL</button>
     <div class="status" id="urlStatus"></div>
@@ -113,6 +115,26 @@
     <button class="btn" id="pasteBtn">Extract from paste</button>
     <button class="btn" id="exampleBtn" style="background:#888;">Show me an example</button>
     <div class="status" id="pasteStatus"></div>
+  </div>
+
+  <div class="panel" id="p-find">
+    <p class="help">Looking for something specific instead of a whole table? Paste text (or drop a PDF on the PDF tab first, then come here), pick what you want, and the extractor pulls out every match. Great for grabbing all the contact emails out of a partner list, every dollar amount in a grant report, or every mention of a program name.</p>
+    <textarea id="findInput" placeholder="Paste a page, a report, an email thread, or PDF text here..."></textarea>
+    <div style="margin-top:12px;font-size:0.88rem;font-weight:600;color:var(--purple);">1. What do you want to find?</div>
+    <div class="row-actions" style="margin-top:8px;">
+      <button class="btn" data-find="email" style="margin-top:0;">📧 Email addresses</button>
+      <button class="btn" data-find="phone" style="margin-top:0;">📞 Phone numbers</button>
+      <button class="btn" data-find="url" style="margin-top:0;">🔗 Web links</button>
+      <button class="btn" data-find="money" style="margin-top:0;">💲 Dollar amounts</button>
+      <button class="btn" data-find="date" style="margin-top:0;">📅 Dates</button>
+      <button class="btn" data-find="postal" style="margin-top:0;">📮 Postal codes</button>
+    </div>
+    <div style="margin-top:16px;font-size:0.88rem;font-weight:600;color:var(--purple);">2. Or search for your own word or phrase</div>
+    <div class="row-actions" style="margin-top:8px;">
+      <input type="url" id="keywordInput" placeholder="e.g. drone, Calgary, deadline, Sabina" style="max-width:320px;">
+      <button class="btn orange" id="keywordBtn" style="margin-top:0;">Search</button>
+    </div>
+    <div class="status" id="findStatus"></div>
   </div>
 
   <div id="result">
@@ -225,20 +247,50 @@ function parseHTMLTables(html) {
 document.getElementById("urlBtn").addEventListener("click", async () => {
   const url = document.getElementById("urlInput").value.trim();
   if (!url) return setStatus("urlStatus", "Paste an address first.", true);
-  setStatus("urlStatus", "Fetching page...");
-  try {
-    const res = await fetch(url);
-    const html = await res.text();
-    const found = parseHTMLTables(html);
-    if (showTables(found, "web page")) {
-      setStatus("urlStatus", "Found " + found.length + " table(s).");
-    } else {
-      setStatus("urlStatus", "Page loaded but no <table> found on it. Try copying the content into the Paste anything tab.", true);
-    }
-  } catch (e) {
-    setStatus("urlStatus", "That website blocked direct reading (this is common, it is a browser security rule called CORS). Open the page, select the table, copy it, and use the Paste anything tab. That always works.", true);
+
+  // Try direct first, then free public readers that add the missing permission header.
+  // None of these need an account or a payment. If one is down, the next is tried.
+  const routes = [
+    {name: "direct", make: u => u},
+    {name: "reader", make: u => "https://api.allorigins.win/raw?url=" + encodeURIComponent(u)},
+    {name: "backup reader", make: u => "https://corsproxy.io/?" + encodeURIComponent(u)},
+  ];
+
+  for (const route of routes) {
+    try {
+      setStatus("urlStatus", "Fetching page (" + route.name + ")...");
+      const res = await fetch(route.make(url));
+      if (!res.ok) continue;
+      const html = await res.text();
+      if (!html || html.length < 50) continue;
+
+      const found = parseHTMLTables(html);
+      if (found.length && showTables(found, "web page")) {
+        window._lastPageText = htmlToText(html);
+        const fi = document.getElementById("findInput"); if (fi) fi.value = window._lastPageText;
+        setStatus("urlStatus", "Found " + found.length + " table(s). The page text is also loaded into the Find tab.");
+        return;
+      }
+      // No <table> on the page: still give them the readable text for the Find tab
+      const text = htmlToText(html);
+      if (text.trim().length > 40) {
+        const fi = document.getElementById("findInput"); if (fi) fi.value = text;
+        const lines = text.split(/\n/).filter(l => l.trim());
+        showTables([{name: "Page text", rows: [["Line", "Text"]].concat(lines.map((l, i) => [String(i + 1), l.trim()]))}], "web page text");
+        setStatus("urlStatus", "No <table> on that page, so I pulled the readable text instead. It's also loaded into the 🔎 Find tab so you can search it.");
+        return;
+      }
+    } catch (e) { /* try the next route */ }
   }
+  setStatus("urlStatus", "Could not read that page. Some sites block all automated reading. Open the page, select the part you want, copy it, and use the Paste anything tab. That always works.", true);
 });
+
+function htmlToText(html) {
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  doc.querySelectorAll("script,style,noscript,svg").forEach(e => e.remove());
+  return (doc.body ? doc.body.innerText || doc.body.textContent : "")
+    .split(/\n/).map(l => l.trim()).filter(Boolean).join("\n");
+}
 
 /* ---------- PDF tab ---------- */
 const dropZone = document.getElementById("dropZone");
@@ -264,6 +316,8 @@ async function handlePDF(file) {
       const rows = itemsToRows(content.items);
       if (rows.length > 1) found.push({name: "Page " + p, rows});
     }
+    window._lastPdfText = found.map(p => p.rows.map(r => r.join(" ")).join("\n")).join("\n");
+    const fi = document.getElementById("findInput"); if (fi) fi.value = window._lastPdfText;
     if (showTables(found, file.name)) {
       setStatus("pdfStatus", "Extracted " + found.length + " page(s) with table-like content.");
     } else {
@@ -331,6 +385,52 @@ document.getElementById("exampleBtn").addEventListener("click", () => {
     "Program\tParticipants\tCity\tYear\nGenius Hour\t120\tCalgary\t2026\nTech Futures Challenge\t85\tEdmonton\t2026\nDrone Camp\t44\tCalgary\t2025\nCoding Challenge\t60\tOnline\t2026";
   document.getElementById("pasteBtn").click();
   setStatus("pasteStatus", "That's example data. Now paste your own and press Extract from paste.");
+});
+
+
+/* ---------- Find specific things ---------- */
+const FINDERS = {
+  email: {label: "Email addresses", re: /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g},
+  phone: {label: "Phone numbers", re: /(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/g},
+  url:   {label: "Web links", re: /https?:\/\/[^\s<>"')]+/g},
+  money: {label: "Dollar amounts", re: /\$\s?\d[\d,]*(?:\.\d{2})?/g},
+  date:  {label: "Dates", re: /\b(?:\d{4}-\d{2}-\d{2}|\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4}|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2},?\s*\d{0,4})\b/gi},
+  postal:{label: "Postal codes", re: /\b[A-Z]\d[A-Z]\s?\d[A-Z]\d\b/gi},
+};
+
+function runFinder(kind) {
+  const text = document.getElementById("findInput").value;
+  if (!text.trim()) return setStatus("findStatus", "Paste some text above first.", true);
+  const f = FINDERS[kind];
+  const hits = [...new Set((text.match(f.re) || []).map(s => s.trim()))];
+  if (!hits.length) return setStatus("findStatus", "No " + f.label.toLowerCase() + " found in that text.", true);
+  const rows = [[f.label, "Where it appears"]];
+  hits.forEach(hit => {
+    const i = text.indexOf(hit);
+    const ctx = text.slice(Math.max(0, i - 45), i + hit.length + 45).replace(/\s+/g, " ").trim();
+    rows.push([hit, "..." + ctx + "..."]);
+  });
+  showTables([{name: f.label, rows}], f.label + " found");
+  setStatus("findStatus", "Found " + hits.length + " " + f.label.toLowerCase() + ". Scroll down for the table, then Download CSV.");
+}
+
+document.querySelectorAll("[data-find]").forEach(b =>
+  b.addEventListener("click", () => runFinder(b.dataset.find)));
+
+document.getElementById("keywordBtn").addEventListener("click", () => {
+  const text = document.getElementById("findInput").value;
+  const kw = document.getElementById("keywordInput").value.trim();
+  if (!text.trim()) return setStatus("findStatus", "Paste some text above first.", true);
+  if (!kw) return setStatus("findStatus", "Type a word or phrase to search for.", true);
+  const lines = text.split(/\r?\n/);
+  const rows = [["Line", "Text containing \"" + kw + "\""]];
+  lines.forEach((line, n) => {
+    if (line.toLowerCase().includes(kw.toLowerCase()) && line.trim())
+      rows.push([String(n + 1), line.trim()]);
+  });
+  if (rows.length === 1) return setStatus("findStatus", "\"" + kw + "\" was not found in that text.", true);
+  showTables([{name: "Matches for " + kw, rows}], "search for \"" + kw + "\"");
+  setStatus("findStatus", "Found " + (rows.length - 1) + " line(s) containing \"" + kw + "\". Scroll down, then Download CSV.");
 });
 
 function parseCSVLine(line) {
