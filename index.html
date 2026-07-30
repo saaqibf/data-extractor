@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MindFuel Data Extractor</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+  :root {
+    --purple: #4B258C;
+    --purple-light: #6d43b8;
+    --orange: #E8871E;
+    --bg: #f7f5fb;
+    --card: #ffffff;
+    --text: #1a1a1a;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg); color: var(--text); min-height: 100vh;
+  }
+  header {
+    background: var(--purple); color: white; padding: 18px 28px;
+    display: flex; align-items: center; gap: 14px;
+  }
+  header h1 { font-size: 1.25rem; font-weight: 700; }
+  header span { opacity: 0.75; font-size: 0.85rem; }
+  .wrap { max-width: 1000px; margin: 24px auto; padding: 0 20px; }
+  .tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+  .tab {
+    padding: 10px 20px; border: 2px solid var(--purple); border-radius: 24px;
+    background: white; color: var(--purple); font-weight: 600; cursor: pointer;
+    font-size: 0.9rem;
+  }
+  .tab.active { background: var(--purple); color: white; }
+  .panel { display: none; background: var(--card); border-radius: 12px; padding: 22px; box-shadow: 0 2px 10px rgba(75,37,140,0.08); }
+  .panel.active { display: block; }
+  .panel p.help { font-size: 0.88rem; color: #555; margin-bottom: 12px; line-height: 1.5; }
+  input[type="url"], textarea {
+    width: 100%; padding: 12px; border: 1.5px solid #d5cce8; border-radius: 8px;
+    font-size: 0.92rem; font-family: inherit;
+  }
+  textarea { min-height: 160px; font-family: ui-monospace, monospace; }
+  .drop {
+    border: 2px dashed var(--purple-light); border-radius: 10px; padding: 36px;
+    text-align: center; color: var(--purple); cursor: pointer; font-weight: 600;
+  }
+  .drop.drag { background: #efe9fa; }
+  .btn {
+    margin-top: 14px; padding: 11px 26px; background: var(--purple); color: white;
+    border: none; border-radius: 8px; font-size: 0.95rem; font-weight: 700; cursor: pointer;
+  }
+  .btn:hover { background: var(--purple-light); }
+  .btn.orange { background: var(--orange); }
+  .status { margin-top: 12px; font-size: 0.88rem; color: var(--purple); font-weight: 600; min-height: 1.2em; }
+  .status.err { color: #c0392b; }
+  #result { margin-top: 26px; display: none; }
+  #result h2 { font-size: 1.05rem; color: var(--purple); margin-bottom: 10px; }
+  .table-scroll { overflow-x: auto; background: white; border-radius: 10px; box-shadow: 0 2px 10px rgba(75,37,140,0.08); max-height: 480px; overflow-y: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.86rem; }
+  th, td { border: 1px solid #e4ddf2; padding: 8px 12px; text-align: left; white-space: nowrap; }
+  th { background: var(--purple); color: white; position: sticky; top: 0; }
+  tr:nth-child(even) { background: #f7f4fc; }
+  .row-actions { display: flex; gap: 10px; align-items: center; margin-top: 14px; flex-wrap: wrap; }
+  select { padding: 8px; border-radius: 8px; border: 1.5px solid #d5cce8; font-size: 0.88rem; }
+  footer { text-align: center; padding: 26px; font-size: 0.78rem; color: #888; }
+</style>
+</head>
+<body>
+<header>
+  <h1>MindFuel Data Extractor</h1>
+  <span>paste a link, drop a PDF, or paste text &rarr; get a table &rarr; download CSV</span>
+</header>
+
+<div class="wrap">
+  <div id="howto" style="background:#efe9fa;border-left:5px solid var(--purple);border-radius:10px;padding:16px 20px;margin-bottom:18px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <strong style="color:var(--purple);">How to use this (3 steps)</strong>
+      <button onclick="document.getElementById('howto').style.display='none'" style="border:none;background:none;color:var(--purple);font-weight:700;cursor:pointer;">hide ✕</button>
+    </div>
+    <ol style="margin:10px 0 4px 18px;font-size:0.9rem;line-height:1.7;">
+      <li><b>Get your data in:</b> drop a PDF on the "From a PDF" tab, or copy a table from any website or Excel and paste it in "Paste anything." (The URL tab works on some sites; if a site blocks it, the paste tab always works.)</li>
+      <li><b>Check the table</b> that appears below.</li>
+      <li><b>Click "Download CSV"</b> and open it in Excel or Google Sheets. Done.</li>
+    </ol>
+    <div style="font-size:0.82rem;color:#555;">Not sure? Click <b>"Show me an example"</b> in the Paste anything tab and watch it work. Nothing you put here leaves your computer.</div>
+  </div>
+  <div class="tabs">
+    <button class="tab active" data-panel="p-url">From a web page</button>
+    <button class="tab" data-panel="p-pdf">From a PDF</button>
+    <button class="tab" data-panel="p-paste">Paste anything</button>
+  </div>
+
+  <div class="panel active" id="p-url">
+    <p class="help">Paste the address of a page that has a table on it, then press Extract. If the website blocks direct reading (some do, for security), copy the page content instead and use the Paste anything tab. That always works.</p>
+    <input type="url" id="urlInput" placeholder="https://example.com/page-with-a-table">
+    <button class="btn" id="urlBtn">Extract from URL</button>
+    <div class="status" id="urlStatus"></div>
+  </div>
+
+  <div class="panel" id="p-pdf">
+    <p class="help">Drop a PDF here or click to choose one. The extractor reads the text and rebuilds the rows and columns. Works best on PDFs where the table is real text (most reports), not a scanned photo.</p>
+    <div class="drop" id="dropZone">Drop PDF here or click to browse
+      <input type="file" id="pdfInput" accept="application/pdf" style="display:none">
+    </div>
+    <div class="status" id="pdfStatus"></div>
+  </div>
+
+  <div class="panel" id="p-paste">
+    <p class="help">Paste anything with structure: a table copied from a website or Excel, comma separated text, or lines with columns. The extractor figures out the separators.</p>
+    <textarea id="pasteInput" placeholder="Paste your table or text here..."></textarea>
+    <button class="btn" id="pasteBtn">Extract from paste</button>
+    <button class="btn" id="exampleBtn" style="background:#888;">Show me an example</button>
+    <div class="status" id="pasteStatus"></div>
+  </div>
+
+  <div id="result">
+    <h2 id="resultTitle">Extracted table</h2>
+    <div class="row-actions">
+      <label style="font-size:0.86rem;">Table found: <select id="tablePick"></select></label>
+      <button class="btn orange" id="csvBtn">Download CSV</button>
+      <button class="btn" id="copyBtn" style="background:#666;">Copy to clipboard</button>
+    </div>
+    <div class="table-scroll" style="margin-top:12px;"><table id="outTable"></table></div>
+  </div>
+</div>
+
+<footer>Built by Saaqib for the MindFuel team, summer 2026. Everything runs in your browser: no uploads, no accounts, your files never leave your computer.</footer>
+
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+let tables = []; // array of {name, rows: [[...]]}
+
+/* ---------- UI plumbing ---------- */
+document.querySelectorAll(".tab").forEach(t => t.addEventListener("click", () => {
+  document.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));
+  document.querySelectorAll(".panel").forEach(x => x.classList.remove("active"));
+  t.classList.add("active");
+  document.getElementById(t.dataset.panel).classList.add("active");
+}));
+
+function setStatus(id, msg, err) {
+  const el = document.getElementById(id);
+  el.textContent = msg;
+  el.classList.toggle("err", !!err);
+}
+
+function showTables(list, sourceName) {
+  tables = list.filter(t => t.rows.length > 0);
+  if (!tables.length) return false;
+  const pick = document.getElementById("tablePick");
+  pick.innerHTML = "";
+  tables.forEach((t, i) => {
+    const o = document.createElement("option");
+    o.value = i;
+    o.textContent = t.name + " (" + t.rows.length + " rows)";
+    pick.appendChild(o);
+  });
+  pick.onchange = () => renderTable(+pick.value);
+  document.getElementById("resultTitle").textContent = "Extracted from " + sourceName;
+  document.getElementById("result").style.display = "block";
+  renderTable(0);
+  document.getElementById("result").scrollIntoView({behavior:"smooth"});
+  return true;
+}
+
+function renderTable(i) {
+  const rows = tables[i].rows;
+  const tbl = document.getElementById("outTable");
+  tbl.innerHTML = "";
+  rows.forEach((r, ri) => {
+    const tr = document.createElement("tr");
+    r.forEach(c => {
+      const cell = document.createElement(ri === 0 ? "th" : "td");
+      cell.textContent = c;
+      tr.appendChild(cell);
+    });
+    tbl.appendChild(tr);
+  });
+}
+
+/* ---------- CSV out ---------- */
+function toCSV(rows) {
+  return rows.map(r => r.map(c => {
+    c = String(c ?? "");
+    return (c.includes(",") || c.includes('"') || c.includes("\n")) ? '"' + c.replace(/"/g, '""') + '"' : c;
+  }).join(",")).join("\r\n");
+}
+
+document.getElementById("csvBtn").addEventListener("click", () => {
+  const i = +document.getElementById("tablePick").value || 0;
+  const blob = new Blob(["﻿" + toCSV(tables[i].rows)], {type: "text/csv;charset=utf-8"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "extracted-data.csv";
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+
+document.getElementById("copyBtn").addEventListener("click", async () => {
+  const i = +document.getElementById("tablePick").value || 0;
+  await navigator.clipboard.writeText(tables[i].rows.map(r => r.join("\t")).join("\n"));
+  document.getElementById("copyBtn").textContent = "Copied!";
+  setTimeout(() => document.getElementById("copyBtn").textContent = "Copy to clipboard", 1500);
+});
+
+/* ---------- HTML table parsing ---------- */
+function parseHTMLTables(html) {
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  const out = [];
+  doc.querySelectorAll("table").forEach((t, i) => {
+    const rows = [];
+    t.querySelectorAll("tr").forEach(tr => {
+      const cells = [...tr.querySelectorAll("th,td")].map(c => c.textContent.trim().replace(/\s+/g, " "));
+      if (cells.some(c => c !== "")) rows.push(cells);
+    });
+    if (rows.length) out.push({name: "Table " + (i + 1), rows});
+  });
+  return out;
+}
+
+/* ---------- URL tab ---------- */
+document.getElementById("urlBtn").addEventListener("click", async () => {
+  const url = document.getElementById("urlInput").value.trim();
+  if (!url) return setStatus("urlStatus", "Paste an address first.", true);
+  setStatus("urlStatus", "Fetching page...");
+  try {
+    const res = await fetch(url);
+    const html = await res.text();
+    const found = parseHTMLTables(html);
+    if (showTables(found, "web page")) {
+      setStatus("urlStatus", "Found " + found.length + " table(s).");
+    } else {
+      setStatus("urlStatus", "Page loaded but no <table> found on it. Try copying the content into the Paste anything tab.", true);
+    }
+  } catch (e) {
+    setStatus("urlStatus", "That website blocked direct reading (this is common, it is a browser security rule called CORS). Open the page, select the table, copy it, and use the Paste anything tab. That always works.", true);
+  }
+});
+
+/* ---------- PDF tab ---------- */
+const dropZone = document.getElementById("dropZone");
+const pdfInput = document.getElementById("pdfInput");
+dropZone.addEventListener("click", () => pdfInput.click());
+dropZone.addEventListener("dragover", e => { e.preventDefault(); dropZone.classList.add("drag"); });
+dropZone.addEventListener("dragleave", () => dropZone.classList.remove("drag"));
+dropZone.addEventListener("drop", e => {
+  e.preventDefault(); dropZone.classList.remove("drag");
+  if (e.dataTransfer.files[0]) handlePDF(e.dataTransfer.files[0]);
+});
+pdfInput.addEventListener("change", () => pdfInput.files[0] && handlePDF(pdfInput.files[0]));
+
+async function handlePDF(file) {
+  setStatus("pdfStatus", "Reading " + file.name + "...");
+  try {
+    const buf = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({data: buf}).promise;
+    const found = [];
+    for (let p = 1; p <= pdf.numPages; p++) {
+      const page = await pdf.getPage(p);
+      const content = await page.getTextContent();
+      const rows = itemsToRows(content.items);
+      if (rows.length > 1) found.push({name: "Page " + p, rows});
+    }
+    if (showTables(found, file.name)) {
+      setStatus("pdfStatus", "Extracted " + found.length + " page(s) with table-like content.");
+    } else {
+      setStatus("pdfStatus", "No table-like text found. If this PDF is a scanned image, the text is not readable this way.", true);
+    }
+  } catch (e) {
+    setStatus("pdfStatus", "Could not read that PDF: " + e.message, true);
+  }
+}
+
+/* Group PDF text items into rows by vertical position, columns by horizontal gaps */
+function itemsToRows(items) {
+  const pts = items
+    .filter(it => it.str.trim() !== "")
+    .map(it => ({x: it.transform[4], y: Math.round(it.transform[5]), s: it.str.trim()}));
+  if (!pts.length) return [];
+  // cluster y values within 3 units
+  const rowsMap = new Map();
+  pts.sort((a, b) => b.y - a.y || a.x - b.x);
+  let currentY = null;
+  pts.forEach(pt => {
+    if (currentY === null || Math.abs(pt.y - currentY) > 3) currentY = pt.y;
+    if (!rowsMap.has(currentY)) rowsMap.set(currentY, []);
+    rowsMap.get(currentY).push(pt);
+  });
+  const rows = [...rowsMap.values()].map(row =>
+    row.sort((a, b) => a.x - b.x).map(pt => pt.s)
+  );
+  // keep only rows that look tabular (2+ cells), but keep all if few qualify
+  const tabular = rows.filter(r => r.length >= 2);
+  return tabular.length >= 2 ? tabular : rows.map(r => [r.join(" ")]);
+}
+
+/* ---------- Paste tab ---------- */
+document.getElementById("pasteBtn").addEventListener("click", () => {
+  const raw = document.getElementById("pasteInput").value;
+  if (!raw.trim()) return setStatus("pasteStatus", "Paste something first.", true);
+
+  // 1. Try HTML tables (rich paste from a website keeps markup only via clipboard API; plain textarea gets text, so also try literal <table> tags)
+  if (raw.includes("<table")) {
+    const found = parseHTMLTables(raw);
+    if (showTables(found, "pasted HTML")) return setStatus("pasteStatus", "Parsed HTML table.");
+  }
+  // 2. Delimited text: tabs first (Excel/website copies), then commas, then 2+ spaces
+  const lines = raw.split(/\r?\n/).filter(l => l.trim() !== "");
+  let delim = null;
+  if (lines.some(l => l.includes("\t"))) delim = "\t";
+  else if (lines.filter(l => l.includes(",")).length > lines.length / 2) delim = ",";
+  let rows;
+  if (delim === "\t") rows = lines.map(l => l.split("\t").map(c => c.trim()));
+  else if (delim === ",") rows = lines.map(parseCSVLine);
+  else rows = lines.map(l => l.split(/\s{2,}/).map(c => c.trim()));
+  // normalize column count to the most common width
+  const width = mode(rows.map(r => r.length));
+  rows = rows.map(r => r.length === width ? r : padOrJoin(r, width));
+  if (showTables([{name: "Pasted data", rows}], "pasted text")) {
+    setStatus("pasteStatus", "Parsed " + rows.length + " rows.");
+  } else {
+    setStatus("pasteStatus", "Could not find structure in that text.", true);
+  }
+});
+
+document.getElementById("exampleBtn").addEventListener("click", () => {
+  document.getElementById("pasteInput").value =
+    "Program\tParticipants\tCity\tYear\nGenius Hour\t120\tCalgary\t2026\nTech Futures Challenge\t85\tEdmonton\t2026\nDrone Camp\t44\tCalgary\t2025\nCoding Challenge\t60\tOnline\t2026";
+  document.getElementById("pasteBtn").click();
+  setStatus("pasteStatus", "That's example data. Now paste your own and press Extract from paste.");
+});
+
+function parseCSVLine(line) {
+  const out = []; let cur = ""; let q = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (q) {
+      if (ch === '"' && line[i+1] === '"') { cur += '"'; i++; }
+      else if (ch === '"') q = false;
+      else cur += ch;
+    } else {
+      if (ch === '"') q = true;
+      else if (ch === ",") { out.push(cur.trim()); cur = ""; }
+      else cur += ch;
+    }
+  }
+  out.push(cur.trim());
+  return out;
+}
+
+function mode(arr) {
+  const m = new Map(); let best = arr[0], n = 0;
+  arr.forEach(v => { const c = (m.get(v) || 0) + 1; m.set(v, c); if (c > n) { n = c; best = v; } });
+  return best;
+}
+
+function padOrJoin(r, w) {
+  if (r.length < w) return r.concat(Array(w - r.length).fill(""));
+  return r.slice(0, w - 1).concat(r.slice(w - 1).join(" "));
+}
+</script>
+</body>
+</html>
