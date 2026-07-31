@@ -324,7 +324,7 @@
 </header>
 
 <div class="wrap">
-  <div id="howto" style="background:#efe9fa;border-left:5px solid var(--purple);border-radius:10px;padding:16px 20px;margin-bottom:18px;">
+  <div id="howto">
     <div class="steps">
       <div class="step"><span class="n">1</span><div><b>Get your data in</b><span>Drag a PDF, Excel, Word or CSV file anywhere onto this page. Or paste a table.</span></div></div>
       <div class="step"><span class="n">2</span><div><b>Tidy it up</b><span>Sort, filter, fix typos, remove duplicates. Undo reverses anything.</span></div></div>
@@ -1404,9 +1404,14 @@ async function handlePDFs(files) {
     return setStatus("pdfStatus", "Could not open " + failed.join(", ") + ". If the file is password protected, remove the password and try again.", true);
   }
   if (!allTables.length) {
-    return setStatus("pdfStatus", anyTextAtAll
-      ? "That PDF has text but no rows and columns I could line up. Try the 🔎 Find specific things tab: the text is loaded there and you can pull out emails, amounts, dates or any word."
-      : "There is no readable text in that PDF, which almost always means it is a scan or a photo of a page. A scan needs OCR software first. Anything exported from Word, Excel or a website will work here.", true);
+    if (!anyTextAtAll) {
+      // iteration 13: a scan used to be a dead end. Offer to read it as a picture instead.
+      window._scanFiles = list;
+      setStatus("pdfStatus", "There is no text in that PDF, so it is a scan or a photo of a page. I can try reading the words off the picture instead.", true);
+      showOcrOffer(list);
+      return;
+    }
+    return setStatus("pdfStatus", "That PDF has text but no rows and columns I could line up. Try the 🔎 Find specific things tab: the text is loaded there and you can pull out emails, amounts, dates or any word.", true);
   }
   // merge same-shape "all pages" tables across files
   const fileWide = allTables.filter(t => t.name.includes("(all pages)"));
@@ -1430,6 +1435,97 @@ async function handlePDFs(files) {
     list.length + " file" + (list.length === 1 ? "" : "s") + " (" + secs + "s)." +
     (failed.length ? " Could not open " + failed.join(", ") + "." : "") +
     " Start with the combined table in the Viewing dropdown. The text is in the \ud83d\udd0e Find tab too.");
+}
+
+/* ================= iteration 13: reading a scanned page =================
+   Every other free tool stops at "this is a scan". This one offers to read the words
+   off the picture. It is slow and imperfect, and the wording says so rather than
+   pretending otherwise. */
+/* Declared standalone rather than hung off the CDN object: that object is created
+   further down the file, and touching it up here would kill the whole script. */
+const OCR_CDN = "https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.1.0/tesseract.min.js";
+
+function showOcrOffer(files) {
+  const host = document.getElementById("pdfStatus");
+  const old = document.getElementById("ocrOffer");
+  if (old) old.remove();
+  const box = document.createElement("div");
+  box.id = "ocrOffer";
+  box.style.cssText = "margin-top:14px;padding:16px 18px;background:var(--orange-tint);" +
+    "border:1px solid #F3D9AE;border-radius:var(--r-md);color:#7A4C05;font-size:0.86rem;line-height:1.6;font-weight:500;";
+  box.innerHTML =
+    "<b>Want me to read it as a picture?</b><br>" +
+    "This works on clear, straight scans. Handwriting and faint photocopies come out badly, so check the result before you trust it. " +
+    "It takes roughly 5 to 15 seconds a page and runs on your computer, not a server.<br>" +
+    "<button class='btn orange' id='ocrGo' style='margin-top:12px'>Read the pictures</button>";
+  host.parentNode.insertBefore(box, host.nextSibling);
+  document.getElementById("ocrGo").onclick = () => runOCR(files);
+}
+
+async function runOCR(files) {
+  const btn = document.getElementById("ocrGo");
+  if (btn) { btn.disabled = true; btn.textContent = "Reading..."; }
+  try {
+    if (!window.Tesseract) { setStatus("pdfStatus", "Getting the picture reader (first time only, about 3 MB)..."); await loadScript(OCR_CDN); }
+  } catch (e) {
+    if (btn) { btn.disabled = false; btn.textContent = "Read the pictures"; }
+    return setStatus("pdfStatus", "Could not fetch the picture reader, which needs internet the first time.", true);
+  }
+
+  const all = [];
+  const t0 = Date.now();
+  try {
+    for (let fi = 0; fi < files.length; fi++) {
+      const file = files[fi];
+      const pdf = await pdfjsLib.getDocument({data: await file.arrayBuffer()}).promise;
+      const pages = Math.min(pdf.numPages, 20);          // a hard stop, so a 400-page scan cannot run all night
+      for (let p = 1; p <= pages; p++) {
+        setStatus("pdfStatus", "Reading " + file.name + ", page " + p + " of " + pages + "... (this is the slow part)");
+        await breathe();
+        const page = await pdf.getPage(p);
+        const viewport = page.getViewport({scale: 2});   // 2x renders sharper text for the reader
+        const canvas = document.createElement("canvas");
+        canvas.width = viewport.width; canvas.height = viewport.height;
+        await page.render({canvasContext: canvas.getContext("2d"), viewport}).promise;
+        const out = await window.Tesseract.recognize(canvas, "eng");
+        all.push({file: file.name, page: p, text: (out.data && out.data.text) || ""});
+      }
+      if (pdf.numPages > 20) all.push({file: file.name, page: 0, text: "[stopped after 20 pages]"});
+    }
+  } catch (e) {
+    if (btn) { btn.disabled = false; btn.textContent = "Read the pictures"; }
+    return setStatus("pdfStatus", "The picture reader failed: " + e.message, true);
+  }
+  return finishOCR(all, Date.now() - t0);
+}
+
+function finishOCR(results, ms) {
+  const offer = document.getElementById("ocrOffer");
+  if (offer) offer.remove();
+  // Two different strings: one for the Find tab with file markers, one clean one for
+  // the table. Counting or tabulating my own "=== file page 1 ===" markers would be wrong.
+  const labelled = results.map(r => "=== " + r.file + " page " + r.page + " ===\n" + r.text).join("\n\n");
+  const readText = results.map(r => r.text || "").join("\n");
+  const words = readText.split(/\s+/).filter(w => /[A-Za-z0-9]/.test(w)).length;
+  if (words < 5) {
+    return setStatus("pdfStatus", "I could not make out any words. That usually means the scan is faint, skewed, or handwritten. Retyping it by hand may genuinely be faster.", true);
+  }
+  const fi = document.getElementById("findInput");
+  if (fi) fi.value = labelled;
+  // lines with 2+ runs of spacing are probably table rows; everything else stays a line
+  const lines = readText.split(/\n/).map(l => l.replace(/\s+$/, "")).filter(l => l.trim());
+  const asRows = lines.map(l => l.split(/\s{2,}/).map(c => c.trim()));
+  const width = mode(asRows.map(r => r.length));
+  const built = width >= 2
+    ? asRows.map(r => r.length === width ? r : padOrJoin(r, width))
+    : [["Line", "Text"]].concat(lines.map((l, i) => [String(i + 1), l]));
+  showTables([{name: "Read from the scan", rows: built}], "a scanned document");
+  setStatus("pdfStatus",
+    "Read " + words + " words off " + results.length + " page" + (results.length === 1 ? "" : "s") +
+    " in " + Math.round(ms / 1000) + " seconds. " +
+    "Check it against the original before you use it: a picture reader confuses 0 with O and 1 with l. " +
+    "The text is in the 🔎 Find tab too.");
+  return true;
 }
 
 /* Group PDF text items into rows by vertical position, columns by horizontal gaps */
