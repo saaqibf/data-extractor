@@ -26,7 +26,7 @@
   header h1 { font-size: 1.25rem; font-weight: 700; }
   header span { opacity: 0.75; font-size: 0.85rem; }
   .wrap { max-width: 1000px; margin: 24px auto; padding: 0 20px; }
-  .tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+  .tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
   .tab {
     padding: 10px 20px; border: 2px solid var(--purple); border-radius: 24px;
     background: white; color: var(--purple); font-weight: 600; cursor: pointer;
@@ -70,15 +70,65 @@
   .tbtn:hover { background:#efe9fa; }
   .tbtn.on { background:var(--purple); color:#fff; border-color:var(--purple); }
   .stat { font-size:0.8rem; color:#666; margin-left:auto; }
-  #colBox { display:none; background:#fff; border-radius:10px; padding:12px 14px; margin-top:8px;
+  #colBox, #toolBox { display:none; background:#fff; border-radius:10px; padding:12px 14px; margin-top:8px;
     box-shadow:0 2px 10px rgba(95,85,201,0.08); font-size:0.85rem; }
   #colBox label { display:inline-block; margin:4px 14px 4px 0; cursor:pointer; }
+  #toolBox .fields { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-top:8px; }
+  #toolBox input[type="text"] { padding:8px; border:1.5px solid #d5cce8; border-radius:8px; font-size:0.85rem; width:180px; }
+  #toolBox .go { padding:8px 18px; background:var(--orange); color:#fff; border:none; border-radius:8px;
+    font-weight:700; font-size:0.85rem; cursor:pointer; }
+  #toolBox .hint { color:#666; margin-top:8px; font-size:0.8rem; line-height:1.5; }
+  td.rowdel { color:#c9c2dc; cursor:pointer; text-align:center; font-weight:700; width:30px; padding:6px; }
+  td.rowdel:hover { color:#c0392b; background:#fdeceb; }
   th.sortable { cursor:pointer; user-select:none; }
   th.sortable:hover { background:var(--purple-light); }
   footer { text-align: center; padding: 26px; font-size: 0.78rem; color: #888; }
+
+  /* ---- iteration 6: feedback you can always see ---- */
+  #toast {
+    position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%) translateY(140%);
+    background: var(--purple); color: #fff; padding: 13px 22px; border-radius: 26px;
+    font-size: 0.88rem; font-weight: 600; box-shadow: 0 6px 24px rgba(75,37,140,0.30);
+    max-width: min(680px, 92vw); z-index: 60; transition: transform .22s ease, opacity .22s ease;
+    opacity: 0; pointer-events: none; text-align: center; line-height: 1.45;
+  }
+  #toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+  #toast.err { background: #c0392b; }
+  #toast.ok  { background: #1f8a4c; }
+
+  /* ---- iteration 6: drop a file anywhere ---- */
+  #dropVeil {
+    position: fixed; inset: 0; background: rgba(95,85,201,0.90); color: #fff; z-index: 90;
+    display: none; align-items: center; justify-content: center; text-align: center;
+    font-size: 1.6rem; font-weight: 800; letter-spacing: 0.3px; padding: 40px;
+  }
+  #dropVeil.on { display: flex; }
+  #dropVeil small { display: block; font-size: 0.95rem; font-weight: 500; opacity: 0.9; margin-top: 12px; }
+
+  .clearx {
+    border: none; background: none; color: #999; font-size: 1rem; cursor: pointer;
+    padding: 0 6px; line-height: 1;
+  }
+  .clearx:hover { color: var(--purple); }
+
+  /* ---- iteration 6: usable on a phone or a small Chromebook ---- */
+  @media (max-width: 620px) {
+    header { padding: 14px 16px; flex-wrap: wrap; gap: 10px; }
+    header span { flex-basis: 100%; font-size: 0.78rem; }
+    .wrap { margin: 16px auto; padding: 0 12px; }
+    .tab { padding: 9px 14px; font-size: 0.82rem; }
+    .panel { padding: 16px; }
+    .btn { width: 100%; margin-top: 10px; }
+    .row-actions .btn { width: auto; flex: 1 1 auto; }
+    table { font-size: 0.78rem; }
+    th, td { padding: 6px 8px; }
+    .table-scroll { max-height: 60vh; }
+  }
 </style>
 </head>
 <body>
+<div id="dropVeil">Drop it anywhere<small>PDFs go to the PDF reader. CSV, TSV and text files load into the paste box. Nothing is uploaded anywhere.</small></div>
+<div id="toast"></div>
 <header>
   <svg viewBox="0 0 120 120" width="34" height="34" style="flex:none"><circle cx="60" cy="62" r="40" fill="none" stroke="#fff" stroke-width="8"/><g fill="none" stroke="#fff" stroke-width="6" stroke-linecap="round"><path d="M60 42c-7-7-19-4-21 5-8 1-12 9-8 16-4 6 0 15 8 16 3 8 14 10 21 4"/><path d="M60 42c7-7 19-4 21 5 8 1 12 9 8 16 4 6 0 15-8 16-3 8-14 10-21 4"/><path d="M60 42v41"/></g><path d="M96 20l4.5 9.5L110 34l-9.5 4.5L96 48l-4.5-9.5L82 34l9.5-4.5z" fill="#F7901E"/></svg>
   <h1>MindFuel Data Extractor</h1>
@@ -92,13 +142,13 @@
       <button onclick="document.getElementById('howto').style.display='none'" style="border:none;background:none;color:var(--purple);font-weight:700;cursor:pointer;">hide ✕</button>
     </div>
     <ol style="margin:10px 0 4px 18px;font-size:0.9rem;line-height:1.7;">
-      <li><b>Get your data in:</b> drop a PDF on the "From a PDF" tab, or copy a table from any website or Excel and paste it in "Paste anything." (The URL tab works on some sites; if a site blocks it, the paste tab always works.)</li>
+      <li><b>Get your data in:</b> drag a PDF or a CSV anywhere onto this page and it goes to the right place by itself. Or copy a table out of Excel or a website and paste it in "Paste anything." (The URL tab works on many sites; when one blocks it, the paste tab always works.)</li>
       <li><b>Check the table</b> that appears below.</li>
       <li><b>Click "Download CSV"</b> and open it in Excel or Google Sheets. Done.</li>
-      <li><b>Messy table?</b> Use <b>🧹 Clean up</b> to trim spaces and drop blank or duplicate rows, click a column heading to sort, or use <b>▦ Columns</b> to hide what you do not need. You can also type straight into a cell to fix it.</li>
-      <li><b>Looking for something specific?</b> Use the <b>🔎 Find specific things</b> tab to pull out every email, phone number, link, dollar amount or date, or search for any word you want. <b>👤 Contact list</b> turns a messy page or email thread into a Name + Email table ready for a mail merge, and you can copy every address or drop them straight into BCC.</li>
+      <li><b>Messy table?</b> <b>🧹 Clean up</b> trims spaces and drops blank or duplicate rows. <b>🔁 Find &amp; replace</b> fixes a spelling everywhere at once. <b>✂️ Split a column</b> pulls "Full Name" apart into first and last. Click a heading to sort, click any cell to edit it, click the <b>✕</b> on a row to delete it, and <b>↶ Undo</b> reverses anything.</li>
+      <li><b>Looking for something specific?</b> The <b>🔎 Find specific things</b> tab pulls out every email, phone number, link, dollar amount or date, or searches for any word. <b>👤 Contact list</b> turns a messy email thread into a Name + Email table ready for a mail merge, and you can copy every address or drop them straight into BCC.</li>
     </ol>
-    <div style="font-size:0.82rem;color:#555;">Not sure? Click <b>"Show me an example"</b> in the Paste anything tab and watch it work. Nothing you put here leaves your computer.</div>
+    <div style="font-size:0.82rem;color:#555;">Not sure? Click <b>"Show me an example"</b> in the Paste anything tab and watch it work. Everything you build stays in the <b>Viewing</b> dropdown, so nothing you extracted is ever thrown away. Nothing you put here leaves your computer.</div>
   </div>
   <div class="tabs">
     <button class="tab active" data-panel="p-url">From a web page</button>
@@ -145,7 +195,7 @@
     </div>
     <div style="margin-top:16px;font-size:0.88rem;font-weight:600;color:var(--purple);">2. Or search for your own word or phrase</div>
     <div class="row-actions" style="margin-top:8px;">
-      <input type="url" id="keywordInput" placeholder="e.g. drone, Calgary, deadline, Sabina" style="max-width:320px;">
+      <input type="search" id="keywordInput" placeholder="e.g. drone, Calgary, deadline, Sabina" style="max-width:320px;">
       <button class="btn orange" id="keywordBtn" style="margin-top:0;">Search</button>
     </div>
     <div style="margin-top:16px;font-size:0.88rem;font-weight:600;color:var(--purple);">3. Turn found emails into something you can use</div>
@@ -159,7 +209,7 @@
   <div id="result">
     <h2 id="resultTitle">Extracted table</h2>
     <div class="row-actions">
-      <label style="font-size:0.86rem;">Table found: <select id="tablePick"></select></label>
+      <label style="font-size:0.86rem;font-weight:600;color:var(--purple);">Viewing: <select id="tablePick" title="Every table found, plus any contact list or summary you build. Switch back any time."></select></label>
       <button class="btn orange" id="csvBtn">Download CSV</button>
       <button class="btn" id="xlsBtn" style="background:#217346;">Download Excel</button>
       <button class="btn" id="copyBtn" style="background:#666;">Copy to clipboard</button>
@@ -169,12 +219,17 @@
       <button class="tbtn" id="cleanBtn" title="Remove blank rows and columns, trim spaces, drop duplicate rows">🧹 Clean up</button>
       <button class="tbtn" id="headerBtn" title="Use the first row as column names">⬆️ First row = headers</button>
       <button class="tbtn" id="colsBtn" title="Choose which columns to keep">▦ Columns</button>
-      <input type="url" id="filterInput" placeholder="Filter rows containing..." style="max-width:220px;padding:8px;font-size:0.85rem;">
+      <button class="tbtn" id="fnrBtn" title="Change a word everywhere in the table at once">🔁 Find &amp; replace</button>
+      <button class="tbtn" id="splitBtn" title="Split one column into two, like Full Name into First and Last">✂️ Split a column</button>
+      <button class="tbtn" id="delBtn" title="Delete the rows currently showing">🗑️ Delete shown rows</button>
+      <input type="search" id="filterInput" placeholder="Filter rows containing..." title="Type to show only matching rows. Press Escape to clear." style="max-width:200px;padding:8px;font-size:0.85rem;">
       <button class="tbtn" id="undoBtn" title="Undo the last change">↶ Undo</button>
       <button class="tbtn" id="summaryBtn" title="Quick quality check of every column">📊 Column summary</button>
+      <button class="tbtn" id="resetBtn" title="Clear everything and start again">✕ Start over</button>
       <span class="stat" id="stat"></span>
     </div>
     <div id="colBox"></div>
+    <div id="toolBox"></div>
     <div class="table-scroll" style="margin-top:12px;"><table id="outTable"></table></div>
   </div>
 </div>
@@ -194,30 +249,88 @@ document.querySelectorAll(".tab").forEach(t => t.addEventListener("click", () =>
   document.getElementById(t.dataset.panel).classList.add("active");
 }));
 
-function setStatus(id, msg, err) {
-  const el = document.getElementById(id);
+/* ---------- iteration 6: one place for feedback, always visible ---------- */
+let _toastTimer = null;
+function toast(msg, kind) {          // kind: "err" | "ok" | undefined
+  const el = document.getElementById("toast");
   el.textContent = msg;
-  el.classList.toggle("err", !!err);
+  el.className = "show" + (kind ? " " + kind : "");
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => { el.className = ""; }, kind === "err" ? 7000 : 4200);
 }
 
-function showTables(list, sourceName) {
-  tables = list.filter(t => t.rows.length > 0);
-  if (!tables.length) return false;
+function activePanelId() {
+  const p = document.querySelector(".panel.active");
+  return p ? p.id : "";
+}
+
+// Which panel does each status element live in? Used to decide if the user can see it.
+const STATUS_PANEL = {
+  urlStatus: "p-url", pdfStatus: "p-pdf", pasteStatus: "p-paste", findStatus: "p-find",
+};
+
+function setStatus(id, msg, err) {
+  const el = document.getElementById(id);
+  if (el) {
+    el.textContent = msg;
+    el.classList.toggle("err", !!err);
+  }
+  // If the message landed in a tab the user is not looking at, or it is an error,
+  // surface it as a toast so it is never missed.
+  if (!msg) return;
+  if (err || STATUS_PANEL[id] !== activePanelId()) toast(msg, err ? "err" : undefined);
+}
+
+/* Reset the view controls (filter, sort, hidden columns) without touching the data */
+function resetView() {
+  hiddenCols.clear();
+  sortState = {col: null, dir: 1};
+  filterText = "";
+  const fi = document.getElementById("filterInput"); if (fi) fi.value = "";
+  const cb = document.getElementById("colBox"); if (cb) cb.style.display = "none";
+}
+
+function refreshPicker(select) {
   const pick = document.getElementById("tablePick");
   pick.innerHTML = "";
   tables.forEach((t, i) => {
     const o = document.createElement("option");
     o.value = i;
-    o.textContent = t.name + " (" + t.rows.length + " rows)";
+    o.textContent = t.name + "  (" + Math.max(0, t.rows.length - 1) + " rows)";
     pick.appendChild(o);
   });
-  pick.onchange = () => { hiddenCols.clear(); sortState={col:null,dir:1}; filterText=''; document.getElementById('filterInput').value=''; renderTable(+pick.value); };
+  pick.value = String(Math.min(select ?? 0, tables.length - 1));
+  pick.onchange = () => { resetView(); renderTable(+pick.value); };
+}
+
+function showTables(list, sourceName) {
+  tables = list.filter(t => t.rows && t.rows.length > 0);
+  if (!tables.length) return false;
+  refreshPicker(0);
   document.getElementById("resultTitle").textContent = "Extracted from " + sourceName;
   document.getElementById("result").style.display = "block";
-  hist = []; hiddenCols.clear(); sortState = {col:null, dir:1}; filterText = "";
-  const fi2 = document.getElementById("filterInput"); if (fi2) fi2.value = "";
+  hist = [];
+  resetView();
   renderTable(0);
-  document.getElementById("result").scrollIntoView({behavior:"smooth"});
+  document.getElementById("result").scrollIntoView({behavior: "smooth"});
+  return true;
+}
+
+/* iteration 7: add a derived view (contact list, column summary) WITHOUT throwing away
+   what was already extracted. Re-pressing the same button replaces its own view
+   instead of stacking a second copy. The original table stays one dropdown click away. */
+function addTable(t, sourceName) {
+  if (!t.rows || !t.rows.length) return false;
+  const at = tables.findIndex(x => x.name === t.name);
+  if (at >= 0) tables[at] = t; else tables.unshift(t);
+  const idx = at >= 0 ? at : 0;
+  refreshPicker(idx);
+  if (sourceName) document.getElementById("resultTitle").textContent = "Extracted from " + sourceName;
+  document.getElementById("result").style.display = "block";
+  hist = [];
+  resetView();
+  renderTable(idx);
+  document.getElementById("result").scrollIntoView({behavior: "smooth"});
   return true;
 }
 
@@ -230,7 +343,18 @@ let filterText = "";
 
 function curIdx() { return +document.getElementById("tablePick").value || 0; }
 function curRows() { return tables[curIdx()].rows; }
-function pushHist() { hist.push(JSON.parse(JSON.stringify(curRows()))); if (hist.length > 25) hist.shift(); }
+/* iteration 7: a snapshot is the data AND what you were looking at, so undo puts
+   the whole screen back rather than leaving a stale filter or sort behind */
+function pushHist() {
+  hist.push({
+    idx: curIdx(),
+    rows: JSON.parse(JSON.stringify(curRows())),
+    hidden: [...hiddenCols],
+    sort: {col: sortState.col, dir: sortState.dir},
+    filter: filterText,
+  });
+  if (hist.length > 25) hist.shift();
+}
 
 function cleanRows(rows) {
   // trim every cell
@@ -252,26 +376,36 @@ function cleanRows(rows) {
   return dedup;
 }
 
+/* Returns the rows as displayed. Also records, in window._srcIdx, which row of the
+   underlying table each displayed body row came from, so an edit made while the table
+   is filtered or sorted still writes back to the right place. */
 function viewRows() {
-  let rows = curRows();
+  const rows = curRows();
   const head = rows[0] || [];
-  let body = rows.slice(1);
+  // carry the true index alongside each row
+  let body = rows.slice(1).map((r, i) => ({r, i: i + 1}));
   if (filterText) {
     const f = filterText.toLowerCase();
-    body = body.filter(r => r.some(c => String(c).toLowerCase().includes(f)));
+    body = body.filter(o => o.r.some(c => String(c).toLowerCase().includes(f)));
   }
   if (sortState.col !== null) {
     const c = sortState.col;
     body = body.slice().sort((a, b) => {
-      const x = a[c] ?? "", y = b[c] ?? "";
+      const x = a.r[c] ?? "", y = b.r[c] ?? "";
       const nx = parseFloat(String(x).replace(/[$,\s]/g, "")), ny = parseFloat(String(y).replace(/[$,\s]/g, ""));
-      const bothNum = !isNaN(nx) && !isNaN(ny);
-      const cmp = bothNum ? nx - ny : String(x).localeCompare(String(y));
+      const bothNum = String(x).trim() !== "" && String(y).trim() !== "" && !isNaN(nx) && !isNaN(ny);
+      const cmp = bothNum ? nx - ny : String(x).localeCompare(String(y), undefined, {numeric: true, sensitivity: "base"});
       return cmp * sortState.dir;
     });
   }
-  const all = [head].concat(body);
+  window._srcIdx = [0].concat(body.map(o => o.i));
+  const all = [head].concat(body.map(o => o.r));
   return all.map(r => r.filter((_, i) => !hiddenCols.has(i)));
+}
+
+/* real column indexes currently on screen, left to right */
+function visibleCols() {
+  return [...Array((curRows()[0] || []).length).keys()].filter(x => !hiddenCols.has(x));
 }
 
 function updateStat() {
@@ -298,7 +432,8 @@ function renderTable(i) {
       cell.textContent = c;
       if (ri === 0) {
         cell.className = "sortable";
-        const real = [...Array((curRows()[0] || []).length).keys()].filter(x => !hiddenCols.has(x))[ci];
+        const real = visibleCols()[ci];
+        cell.title = "Click to sort by this column";
         if (sortState.col === real) cell.textContent = c + (sortState.dir === 1 ? "  ▲" : "  ▼");
         cell.onclick = () => {
           sortState = {col: real, dir: sortState.col === real ? -sortState.dir : 1};
@@ -306,15 +441,47 @@ function renderTable(i) {
         };
       } else {
         cell.contentEditable = "true";
+        cell.spellcheck = false;
+        cell.title = "Click to edit. Tab moves to the next cell.";
+        const srcRow = (window._srcIdx || [])[ri];   // true row, even when sorted or filtered
+        const srcCol = visibleCols()[ci];
+        const before = c;
         cell.onblur = () => {
-          const realCols = [...Array((curRows()[0] || []).length).keys()].filter(x => !hiddenCols.has(x));
-          const src = curRows();
-          // only safe to write back when not filtered or sorted
-          if (!filterText && sortState.col === null) { pushHist(); src[ri][realCols[ci]] = cell.textContent; updateStat(); }
+          const now = cell.textContent;
+          if (now === before || srcRow === undefined) return;
+          pushHist();
+          curRows()[srcRow][srcCol] = now;
+          updateStat();
+        };
+        cell.onkeydown = ev => {
+          if (ev.key === "Enter") { ev.preventDefault(); cell.blur(); }
+          if (ev.key === "Escape") { cell.textContent = before; cell.blur(); }
         };
       }
       tr.appendChild(cell);
     });
+    // iteration 8: a quiet ✕ on every row, so removing one bad row is one click
+    if (ri === 0) {
+      const th = document.createElement("th");
+      th.textContent = "";
+      th.title = "Each row has a ✕ to delete it";
+      th.style.width = "30px";
+      tr.insertBefore(th, tr.firstChild);
+    } else {
+      const del = document.createElement("td");
+      del.className = "rowdel";
+      del.textContent = "✕";
+      del.title = "Delete this row (Undo brings it back)";
+      const srcRow = (window._srcIdx || [])[ri];
+      del.onclick = () => {
+        if (srcRow === undefined) return;
+        pushHist();
+        curRows().splice(srcRow, 1);
+        renderTable(curIdx());
+        toast("Row deleted. ↶ Undo brings it back.", "ok");
+      };
+      tr.insertBefore(del, tr.firstChild);
+    }
     tbl.appendChild(tr);
   });
   updateStat();
@@ -327,25 +494,45 @@ document.getElementById("cleanBtn").addEventListener("click", () => {
   hiddenCols.clear();
   renderTable(curIdx());
   const removed = before - curRows().length;
-  setStatus("pasteStatus", "Cleaned: trimmed spaces, removed " + removed + " blank or duplicate row(s), dropped empty columns.");
+  toast(removed
+    ? "Cleaned up: trimmed spaces and removed " + removed + " blank or duplicate row" + (removed === 1 ? "" : "s") + "."
+    : "Cleaned up: trimmed spaces. Nothing needed removing, this table was already tidy.", "ok");
 });
 
 document.getElementById("headerBtn").addEventListener("click", () => {
-  pushHist();
   const rows = curRows();
-  if (rows.length > 1) { tables[curIdx()].rows = rows.slice(1); }
+  if (rows.length < 2) return toast("Not enough rows to do that.", "err");
+  pushHist();
+  tables[curIdx()].rows = rows.slice(1);
   renderTable(curIdx());
+  toast("Row promoted. “" + (curRows()[0] || []).slice(0, 3).join(", ") + "” is now the header. Undo if that is wrong.", "ok");
 });
 
 document.getElementById("undoBtn").addEventListener("click", () => {
-  if (!hist.length) return;
-  tables[curIdx()].rows = hist.pop();
-  renderTable(curIdx());
+  if (!hist.length) return toast("Nothing to undo yet.", "err");
+  const s = hist.pop();
+  const i = Math.min(s.idx ?? curIdx(), tables.length - 1);
+  tables[i].rows = s.rows;
+  hiddenCols = new Set(s.hidden || []);
+  sortState = s.sort || {col: null, dir: 1};
+  filterText = s.filter || "";
+  document.getElementById("tablePick").value = String(i);
+  document.getElementById("filterInput").value = filterText;
+  renderTable(i);
+  toast("Undone." + (hist.length ? " " + hist.length + " more step" + (hist.length === 1 ? "" : "s") + " available." : ""), "ok");
 });
 
+/* filter: debounced so a big table stays responsive while typing, Escape clears it */
+let _filterTimer = null;
 document.getElementById("filterInput").addEventListener("input", e => {
-  filterText = e.target.value.trim();
-  renderTable(curIdx());
+  clearTimeout(_filterTimer);
+  const v = e.target.value.trim();
+  _filterTimer = setTimeout(() => { filterText = v; renderTable(curIdx()); }, 140);
+});
+document.getElementById("filterInput").addEventListener("keydown", e => {
+  if (e.key === "Escape") {
+    e.target.value = ""; filterText = ""; clearTimeout(_filterTimer); renderTable(curIdx());
+  }
 });
 
 document.getElementById("colsBtn").addEventListener("click", () => {
@@ -364,6 +551,149 @@ document.getElementById("colsBtn").addEventListener("click", () => {
 });
 
 
+
+/* ================= iteration 8: editing the table for real ================= */
+function escRe(s) { return String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
+
+/* Replace text across the table. Plain text in, plain text out: no regex to learn. */
+function replaceInTable(rows, from, to, opts) {
+  opts = opts || {};
+  if (!from) return 0;
+  const flags = "g" + (opts.matchCase ? "" : "i");
+  const re = new RegExp(opts.whole ? "^" + escRe(from) + "$" : escRe(from), flags);
+  let n = 0;
+  const start = opts.includeHeader ? 0 : 1;
+  for (let r = start; r < rows.length; r++) {
+    for (let c = 0; c < rows[r].length; c++) {
+      if (opts.col !== null && opts.col !== undefined && c !== opts.col) continue;
+      const v = String(rows[r][c] ?? "");
+      const out = v.replace(re, to);
+      if (out !== v) { rows[r][c] = out; n++; }
+    }
+  }
+  return n;
+}
+
+/* Split one column into several. "Sabina Bauer sbl@x.ca" -> three columns. */
+function splitColumn(rows, col, sep, limit) {
+  if (!rows.length) return {rows, made: 0};
+  const cut = v => {
+    const s = String(v ?? "");
+    if (!sep) return [s];
+    const parts = sep === " " ? s.trim().split(/\s+/) : s.split(sep).map(x => x.trim());
+    if (limit && parts.length > limit) return parts.slice(0, limit - 1).concat(parts.slice(limit - 1).join(sep === " " ? " " : sep));
+    return parts;
+  };
+  const widths = rows.slice(1).map(r => cut(r[col]).length);
+  const made = Math.max(1, ...widths);
+  if (made < 2) return {rows, made: 0};
+  const baseName = String(rows[0][col] ?? "Column " + (col + 1));
+  const heads = Array.from({length: made}, (_, i) => baseName + " " + (i + 1));
+  const out = rows.map((r, ri) => {
+    const pieces = ri === 0 ? heads : cut(r[col]).concat(Array(made).fill("")).slice(0, made);
+    return r.slice(0, col).concat(pieces, r.slice(col + 1));
+  });
+  return {rows: out, made};
+}
+
+function closeBoxes() {
+  document.getElementById("toolBox").style.display = "none";
+  document.getElementById("colBox").style.display = "none";
+}
+
+function colOptions(selectedAll) {
+  const head = curRows()[0] || [];
+  return (selectedAll ? "<option value=''>every column</option>" : "") +
+    head.map((h, i) => "<option value='" + i + "'>" + esc(h || "column " + (i + 1)) + "</option>").join("");
+}
+
+document.getElementById("fnrBtn").addEventListener("click", () => {
+  if (!tables.length) return toast("Extract a table first.", "err");
+  const box = document.getElementById("toolBox");
+  if (box.dataset.mode === "fnr" && box.style.display === "block") return closeBoxes();
+  box.dataset.mode = "fnr";
+  box.innerHTML =
+    "<b style='color:var(--purple)'>Find &amp; replace</b>" +
+    "<div class='fields'>" +
+      "<label>Find <input type='text' id='fnrFrom' placeholder='e.g. Calgry'></label>" +
+      "<label>Replace with <input type='text' id='fnrTo' placeholder='e.g. Calgary'></label>" +
+      "<label>In <select id='fnrCol'>" + colOptions(true) + "</select></label>" +
+      "<label><input type='checkbox' id='fnrCase'> match upper/lower case</label>" +
+      "<label><input type='checkbox' id='fnrWhole'> whole cell only</label>" +
+      "<button class='go' id='fnrGo'>Replace all</button>" +
+    "</div>" +
+    "<div class='hint'>Leave <b>Replace with</b> empty to delete the text. Nothing is permanent: <b>↶ Undo</b> puts it back.</div>";
+  box.style.display = "block";
+  document.getElementById("fnrGo").onclick = () => {
+    const from = document.getElementById("fnrFrom").value;
+    if (!from) return toast("Type what you want to find first.", "err");
+    const colv = document.getElementById("fnrCol").value;
+    pushHist();
+    const n = replaceInTable(curRows(), from, document.getElementById("fnrTo").value, {
+      col: colv === "" ? null : +colv,
+      matchCase: document.getElementById("fnrCase").checked,
+      whole: document.getElementById("fnrWhole").checked,
+    });
+    renderTable(curIdx());
+    toast(n ? "Changed " + n + " cell" + (n === 1 ? "" : "s") + "." : "Nothing matched \"" + from + "\".", n ? "ok" : "err");
+  };
+  document.getElementById("fnrFrom").focus();
+});
+
+document.getElementById("splitBtn").addEventListener("click", () => {
+  if (!tables.length) return toast("Extract a table first.", "err");
+  const box = document.getElementById("toolBox");
+  if (box.dataset.mode === "split" && box.style.display === "block") return closeBoxes();
+  box.dataset.mode = "split";
+  box.innerHTML =
+    "<b style='color:var(--purple)'>Split a column into several</b>" +
+    "<div class='fields'>" +
+      "<label>Split <select id='spCol'>" + colOptions(false) + "</select></label>" +
+      "<label>at each <select id='spSep'>" +
+        "<option value=' '>space</option><option value=','>comma</option>" +
+        "<option value=' - '>dash with spaces</option><option value='@'>@ sign</option>" +
+        "<option value='|'>vertical bar</option><option value=';'>semicolon</option>" +
+        "<option value='__custom__'>something else...</option></select></label>" +
+      "<input type='text' id='spCustom' placeholder='type the separator' style='display:none'>" +
+      "<label>into at most <select id='spLimit'><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option></select> columns</label>" +
+      "<button class='go' id='spGo'>Split it</button>" +
+    "</div>" +
+    "<div class='hint'>Use this for a stuck column like <i>Full Name</i> into first and last, or <i>Name &lt;email&gt;</i> into two. <b>↶ Undo</b> reverses it.</div>";
+  box.style.display = "block";
+  document.getElementById("spSep").onchange = e => {
+    document.getElementById("spCustom").style.display = e.target.value === "__custom__" ? "inline-block" : "none";
+  };
+  document.getElementById("spGo").onclick = () => {
+    const col = +document.getElementById("spCol").value;
+    let sep = document.getElementById("spSep").value;
+    if (sep === "__custom__") sep = document.getElementById("spCustom").value;
+    if (!sep) return toast("Pick or type a separator first.", "err");
+    pushHist();
+    const res = splitColumn(curRows(), col, sep, +document.getElementById("spLimit").value);
+    if (!res.made) { hist.pop(); return toast("That separator does not appear in this column, so there is nothing to split.", "err"); }
+    tables[curIdx()].rows = res.rows;
+    resetView();
+    renderTable(curIdx());
+    toast("Split into " + res.made + " columns. Rename them by typing in the header row, or hide the ones you do not need with ▦ Columns.", "ok");
+  };
+});
+
+document.getElementById("delBtn").addEventListener("click", () => {
+  if (!tables.length) return toast("Extract a table first.", "err");
+  const idxs = (window._srcIdx || []).slice(1);
+  const total = curRows().length - 1;
+  if (!idxs.length) return toast("No rows to delete.", "err");
+  if (idxs.length === total) {
+    return toast("That would delete every row. Filter first so only the rows you want gone are showing, then press this.", "err");
+  }
+  if (!confirm("Delete the " + idxs.length + " row(s) currently showing? Undo can bring them back.")) return;
+  pushHist();
+  const kill = new Set(idxs);
+  tables[curIdx()].rows = curRows().filter((_, i) => i === 0 || !kill.has(i));
+  filterText = ""; document.getElementById("filterInput").value = "";
+  renderTable(curIdx());
+  toast("Deleted " + idxs.length + " row" + (idxs.length === 1 ? "" : "s") + ". Press ↶ Undo to bring them back.", "ok");
+});
 
 /* ================= column summary (iteration 5) ================= */
 function columnSummary(rows) {
@@ -389,27 +719,26 @@ function columnSummary(rows) {
 }
 
 document.getElementById("summaryBtn").addEventListener("click", () => {
-  if (!tables.length) return;
-  const src = curRows();
-  showTables([{name: "Column summary", rows: columnSummary(src)}].concat(tables), "column summary");
-  setStatus("pasteStatus", "Column summary built. Check Empty counts for gaps, and Looks like to spot a column that should be numbers but is not.");
+  if (!tables.length) return toast("Extract a table first, then I can summarise it.", "err");
+  const of = tables[curIdx()].name;
+  if (/^Summary of /.test(of)) return toast("You are already looking at a summary. Pick the real table in the dropdown first.", "err");
+  addTable({name: "Summary of " + of, rows: columnSummary(curRows())});
+  toast("Column summary ready. Check Empty for gaps, and Looks like to spot a column that should be numbers but is not. Your table is still in the dropdown.", "ok");
 });
 
 /* ================= exports (iteration 2) ================= */
 function esc(s){ return String(s ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
 
 document.getElementById("xlsBtn").addEventListener("click", () => {
+  if (!tables.length) return toast("Nothing to download yet.", "err");
   const rows = viewRows();
   const html = "<html><head><meta charset='utf-8'></head><body><table border='1'>" +
     rows.map((r, i) => "<tr>" + r.map(c =>
       i === 0 ? "<th style='background:#5F55C9;color:#fff'>" + esc(c) + "</th>" : "<td>" + esc(c) + "</td>"
     ).join("") + "</tr>").join("") + "</table></body></html>";
-  const blob = new Blob(["\ufeff" + html], {type: "application/vnd.ms-excel"});
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = "extracted-data.xls";
-  a.click();
-  URL.revokeObjectURL(a.href);
+  const name = fileName("xls");
+  download(new Blob(["\ufeff" + html], {type: "application/vnd.ms-excel"}), name);
+  toast("Saved " + name + ". Excel may warn that the format differs: choose Yes and it opens normally.", "ok");
 });
 
 function toMarkdown(rows) {
@@ -456,21 +785,39 @@ function toCSV(rows) {
   }).join(",")).join("\r\n");
 }
 
-document.getElementById("csvBtn").addEventListener("click", () => {
-  const i = +document.getElementById("tablePick").value || 0;
-  const blob = new Blob(["﻿" + toCSV(tables[i].rows)], {type: "text/csv;charset=utf-8"});
+/* A filename that says what it is, so a folder of downloads is not five copies of
+   "extracted-data.csv". Iteration 8. */
+function fileName(ext) {
+  const raw = (tables[curIdx()] || {}).name || "extracted-data";
+  const base = raw.toLowerCase().replace(/\.(pdf|csv|xlsx?)\b/g, "")
+    .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 48) || "extracted-data";
+  const d = new Date();
+  const stamp = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  return base + "-" + stamp + "." + ext;
+}
+
+function download(blob, name) {
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = "extracted-data.csv";
+  a.download = name;
   a.click();
-  URL.revokeObjectURL(a.href);
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+document.getElementById("csvBtn").addEventListener("click", () => {
+  if (!tables.length) return toast("Nothing to download yet.", "err");
+  const rows = viewRows();          // was tables[i].rows: filtering and hidden columns were ignored
+  const name = fileName("csv");
+  download(new Blob(["﻿" + toCSV(rows)], {type: "text/csv;charset=utf-8"}), name);
+  toast("Saved " + name + " with " + (rows.length - 1) + " rows. Open it in Excel or Google Sheets.", "ok");
 });
 
 document.getElementById("copyBtn").addEventListener("click", async () => {
-  const i = +document.getElementById("tablePick").value || 0;
+  if (!tables.length) return toast("Nothing to copy yet.", "err");
   await navigator.clipboard.writeText(viewRows().map(r => r.join("\t")).join("\n"));
   document.getElementById("copyBtn").textContent = "Copied!";
   setTimeout(() => document.getElementById("copyBtn").textContent = "Copy to clipboard", 1500);
+  toast("Copied. Paste straight into Excel or Google Sheets and it lands in columns.", "ok");
 });
 
 /* ---------- HTML table parsing ---------- */
@@ -489,25 +836,42 @@ function parseHTMLTables(html) {
 }
 
 /* ---------- URL tab ---------- */
+/* a route that hangs should not hang the whole tool: give each one 15 seconds (iteration 9) */
+async function fetchWithTimeout(u, ms) {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), ms || 15000);
+  try { return await fetch(u, {signal: ctl.signal}); }
+  finally { clearTimeout(timer); }
+}
+
 document.getElementById("urlBtn").addEventListener("click", async () => {
-  const url = document.getElementById("urlInput").value.trim();
+  let url = document.getElementById("urlInput").value.trim();
   if (!url) return setStatus("urlStatus", "Paste an address first.", true);
+  if (!/^https?:\/\//i.test(url)) {            // be forgiving about a missing https://
+    url = "https://" + url.replace(/^\/+/, "");
+    document.getElementById("urlInput").value = url;
+  }
+
+  const btn = document.getElementById("urlBtn");
+  btn.disabled = true; btn.textContent = "Reading...";
+  const done = () => { btn.disabled = false; btn.textContent = "Extract from URL"; };
 
   // Try direct first, then free public readers that add the missing permission header.
   // None of these need an account or a payment. If one is down, the next is tried.
   const routes = [
-    {name: "direct", make: u => u},
-    {name: "reader", make: u => "https://api.allorigins.win/raw?url=" + encodeURIComponent(u)},
-    {name: "backup reader", make: u => "https://corsproxy.io/?" + encodeURIComponent(u)},
+    {name: "1 of 3, direct", make: u => u},
+    {name: "2 of 3, reader", make: u => "https://api.allorigins.win/raw?url=" + encodeURIComponent(u)},
+    {name: "3 of 3, backup reader", make: u => "https://corsproxy.io/?" + encodeURIComponent(u)},
   ];
 
   for (const route of routes) {
     try {
-      setStatus("urlStatus", "Fetching page (" + route.name + ")...");
-      const res = await fetch(route.make(url));
+      setStatus("urlStatus", "Trying route " + route.name + "... (each route gets 15 seconds)");
+      const res = await fetchWithTimeout(route.make(url), 15000);
       if (!res.ok) continue;
       const html = await res.text();
       if (!html || html.length < 50) continue;
+      done();
 
       const found = parseHTMLTables(html);
       if (found.length && showTables(found, "web page")) {
@@ -527,7 +891,8 @@ document.getElementById("urlBtn").addEventListener("click", async () => {
       }
     } catch (e) { /* try the next route */ }
   }
-  setStatus("urlStatus", "Could not read that page. Some sites block all automated reading. Open the page, select the part you want, copy it, and use the Paste anything tab. That always works.", true);
+  done();
+  setStatus("urlStatus", "None of the three routes could read that page. Sites often block automated reading, and every free tool of this kind hits the same wall. The fix takes ten seconds: open the page, select the table, copy it, and paste it in the Paste anything tab. That route always works.", true);
 });
 
 function htmlToText(html) {
@@ -545,27 +910,45 @@ dropZone.addEventListener("dragover", e => { e.preventDefault(); dropZone.classL
 dropZone.addEventListener("dragleave", () => dropZone.classList.remove("drag"));
 dropZone.addEventListener("drop", e => {
   e.preventDefault(); dropZone.classList.remove("drag");
-  if (e.dataTransfer.files.length) handlePDFs(e.dataTransfer.files);
+  if (e.dataTransfer.files.length) routeFiles(e.dataTransfer.files);
 });
-pdfInput.addEventListener("change", () => pdfInput.files.length && handlePDFs(pdfInput.files));
+pdfInput.addEventListener("change", () => pdfInput.files.length && routeFiles(pdfInput.files));
+
+/* let the browser repaint, so a long PDF shows progress instead of freezing (iteration 9) */
+const breathe = () => new Promise(r => setTimeout(r, 0));
 
 async function handlePDFs(files) {
-  const list = [...files];
-  setStatus("pdfStatus", "Reading " + list.length + " file(s)...");
+  const list = [...files].filter(f => /\.pdf$/i.test(f.name) || f.type === "application/pdf");
+  if (!list.length) return setStatus("pdfStatus", "Those are not PDFs. Drop a .pdf here, or use the Paste anything tab.", true);
   let allTables = [];
   let allText = [];
-  for (const file of list) {
+  let anyTextAtAll = false;
+  let failed = [];
+  const t0 = Date.now();
+  for (let fi = 0; fi < list.length; fi++) {
+    const file = list[fi];
+    const which = list.length > 1 ? "File " + (fi + 1) + " of " + list.length + ": " : "";
     try {
+      setStatus("pdfStatus", which + "opening " + file.name + "...");
       const buf = await file.arrayBuffer();
       const pdf = await pdfjsLib.getDocument({data: buf}).promise;
       const pages = [];
+      const raw = [];
       for (let p = 1; p <= pdf.numPages; p++) {
+        // update at most a few times a second, and only when it is worth saying
+        if (pdf.numPages > 3 && (p === 1 || p % 3 === 0 || p === pdf.numPages)) {
+          setStatus("pdfStatus", which + file.name + " — page " + p + " of " + pdf.numPages + "...");
+          await breathe();
+        }
         const page = await pdf.getPage(p);
         const content = await page.getTextContent();
+        if (content.items.some(it => it.str.trim() !== "")) anyTextAtAll = true;
         const rows = itemsToRows(content.items);
+        // keep the raw text no matter what, so the Find tab works even when no table lines up
+        raw.push(rows.map(r => r.join("  ")).join("\n"));
         if (rows.length > 1) pages.push({name: file.name + " p" + p, rows});
       }
-      allText.push("=== " + file.name + " ===\n" + pages.map(p => p.rows.map(r => r.join(" ")).join("\n")).join("\n"));
+      allText.push("=== " + file.name + " ===\n" + raw.join("\n"));
       const stitched = stitchPages(pages);
       if (stitched.length > pages.length) {
         stitched[0].name = file.name + " (all pages)";
@@ -573,11 +956,22 @@ async function handlePDFs(files) {
       }
       allTables = allTables.concat(pages);
     } catch (e) {
-      setStatus("pdfStatus", "Could not read " + file.name + ": " + e.message, true);
+      failed.push(file.name);
+      console.warn("PDF failed:", file.name, e);
     }
   }
+  // load the text into the Find tab first: useful even when no table could be built
+  window._lastPdfText = allText.join("\n\n");
+  const fiEarly = document.getElementById("findInput");
+  if (fiEarly && window._lastPdfText.trim()) fiEarly.value = window._lastPdfText;
+
+  if (failed.length && !allTables.length) {
+    return setStatus("pdfStatus", "Could not open " + failed.join(", ") + ". If the file is password protected, remove the password and try again.", true);
+  }
   if (!allTables.length) {
-    return setStatus("pdfStatus", "No table-like text found. If these are scanned images, the text is not readable this way.", true);
+    return setStatus("pdfStatus", anyTextAtAll
+      ? "That PDF has text but no rows and columns I could line up. Try the 🔎 Find specific things tab: the text is loaded there and you can pull out emails, amounts, dates or any word."
+      : "There is no readable text in that PDF, which almost always means it is a scan or a photo of a page. A scan needs OCR software first. Anything exported from Word, Excel or a website will work here.", true);
   }
   // merge same-shape "all pages" tables across files
   const fileWide = allTables.filter(t => t.name.includes("(all pages)"));
@@ -594,10 +988,13 @@ async function handlePDFs(files) {
       allTables.unshift({name: "ALL " + fileWide.length + " FILES merged" + (dupes ? " (" + dupes + " duplicate rows removed)" : ""), rows: merged});
     }
   }
-  window._lastPdfText = allText.join("\n\n");
-  const fi = document.getElementById("findInput"); if (fi) fi.value = window._lastPdfText;
   showTables(allTables, list.length === 1 ? list[0].name : list.length + " files");
-  setStatus("pdfStatus", "Extracted " + allTables.length + " table(s) from " + list.length + " file(s). Their text is in the \ud83d\udd0e Find tab too.");
+  const secs = ((Date.now() - t0) / 1000).toFixed(1);
+  setStatus("pdfStatus",
+    "Found " + allTables.length + " table" + (allTables.length === 1 ? "" : "s") + " in " +
+    list.length + " file" + (list.length === 1 ? "" : "s") + " (" + secs + "s)." +
+    (failed.length ? " Could not open " + failed.join(", ") + "." : "") +
+    " Start with the combined table in the Viewing dropdown. The text is in the \ud83d\udd0e Find tab too.");
 }
 
 /* Group PDF text items into rows by vertical position, columns by horizontal gaps */
@@ -633,24 +1030,55 @@ document.getElementById("pasteBtn").addEventListener("click", () => {
     const found = parseHTMLTables(raw);
     if (showTables(found, "pasted HTML")) return setStatus("pasteStatus", "Parsed HTML table.");
   }
-  // 2. Delimited text: tabs first (Excel/website copies), then commas, then 2+ spaces
+  // 2. Delimited text. Iteration 9: score every candidate separator and pick the one
+  //    that gives the most consistent columns, instead of assuming tab then comma.
   const lines = raw.split(/\r?\n/).filter(l => l.trim() !== "");
-  let delim = null;
-  if (lines.some(l => l.includes("\t"))) delim = "\t";
-  else if (lines.filter(l => l.includes(",")).length > lines.length / 2) delim = ",";
-  let rows;
-  if (delim === "\t") rows = lines.map(l => l.split("\t").map(c => c.trim()));
-  else if (delim === ",") rows = lines.map(parseCSVLine);
-  else rows = lines.map(l => l.split(/\s{2,}/).map(c => c.trim()));
+  if (!lines.length) return setStatus("pasteStatus", "Paste something first.", true);
+  const best = detectDelimiter(lines);
+  let rows = splitLines(lines, best.delim);
   // normalize column count to the most common width
   const width = mode(rows.map(r => r.length));
   rows = rows.map(r => r.length === width ? r : padOrJoin(r, width));
   if (showTables([{name: "Pasted data", rows}], "pasted text")) {
-    setStatus("pasteStatus", "Parsed " + rows.length + " rows.");
+    setStatus("pasteStatus", "Read " + (rows.length - 1) + " rows in " + width + " column" + (width === 1 ? "" : "s") +
+      " (separated by " + best.label + ")." +
+      (width === 1 ? " Only one column came out: if that is wrong, the separator may be something unusual." : "") +
+      " Wrong header? Press ⬆️ First row = headers.");
   } else {
-    setStatus("pasteStatus", "Could not find structure in that text.", true);
+    setStatus("pasteStatus", "Could not find any structure in that text.", true);
   }
 });
+
+/* Which separator gives the cleanest table? The one where most lines agree on a
+   column count above one. */
+const DELIMS = [
+  {delim: "\t", label: "tabs, so this came from Excel or a website"},
+  {delim: ",",  label: "commas"},
+  {delim: ";",  label: "semicolons"},
+  {delim: "|",  label: "vertical bars"},
+  {delim: "  ", label: "runs of spaces"},
+];
+
+function splitLines(lines, delim) {
+  if (delim === ",") return lines.map(parseCSVLine);
+  if (delim === "  ") return lines.map(l => l.trim().split(/\s{2,}/).map(c => c.trim()));
+  return lines.map(l => l.split(delim).map(c => c.trim()));
+}
+
+function detectDelimiter(lines) {
+  const sample = lines.slice(0, 60);
+  let best = {delim: "  ", label: "runs of spaces", score: -1, width: 1};
+  DELIMS.forEach(d => {
+    const rows = splitLines(sample, d.delim);
+    const widths = rows.map(r => r.length);
+    const w = mode(widths);
+    if (w < 2) return;
+    const agree = widths.filter(x => x === w).length / widths.length;   // 0..1 consistency
+    const score = agree * 100 + Math.min(w, 12);                        // consistency first, then richness
+    if (score > best.score) best = {delim: d.delim, label: d.label, score, width: w};
+  });
+  return best;
+}
 
 
 /* drag a CSV or TXT straight onto the paste box */
@@ -769,8 +1197,8 @@ function runFinder(kind) {
   if (kind === "contacts") {
     const rows = buildContacts(text);
     if (rows.length === 1) return setStatus("findStatus", "No email addresses found in that text.", true);
-    showTables([{name: "Contacts", rows}], "contact list");
-    return setStatus("findStatus", "Built a contact list of " + (rows.length - 1) + " people. Check the names, fix any in the table, then Download CSV or Excel for a mail merge.");
+    addTable({name: "Contacts", rows}, "contact list");
+    return setStatus("findStatus", "Built a contact list of " + (rows.length - 1) + " people. Check the names, fix any straight in the table, then Download CSV or Excel for a mail merge.");
   }
   const f = FINDERS[kind];
   const hits = [...new Set((text.match(f.re) || []).map(s => s.trim()))];
@@ -781,7 +1209,7 @@ function runFinder(kind) {
     const ctx = text.slice(Math.max(0, i - 45), i + hit.length + 45).replace(/\s+/g, " ").trim();
     rows.push([hit, "..." + ctx + "..."]);
   });
-  showTables([{name: f.label, rows}], f.label + " found");
+  addTable({name: f.label, rows}, f.label + " found");
   setStatus("findStatus", "Found " + hits.length + " " + f.label.toLowerCase() + ". Scroll down for the table, then Download CSV.");
 }
 
@@ -800,8 +1228,82 @@ document.getElementById("keywordBtn").addEventListener("click", () => {
       rows.push([String(n + 1), line.trim()]);
   });
   if (rows.length === 1) return setStatus("findStatus", "\"" + kw + "\" was not found in that text.", true);
-  showTables([{name: "Matches for " + kw, rows}], "search for \"" + kw + "\"");
+  addTable({name: "Matches for " + kw, rows}, "search for \"" + kw + "\"");
   setStatus("findStatus", "Found " + (rows.length - 1) + " line(s) containing \"" + kw + "\". Scroll down, then Download CSV.");
+});
+
+/* ================= iteration 6: drop a file anywhere, keyboard, start over ================= */
+
+function goToTab(panelId) {
+  document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.panel === panelId));
+  document.querySelectorAll(".panel").forEach(p => p.classList.toggle("active", p.id === panelId));
+}
+
+/* Send any dropped file to the right place, whatever tab happens to be open. */
+async function routeFiles(fileList) {
+  const files = [...(fileList || [])];
+  if (!files.length) return;
+  const pdfs = files.filter(f => /\.pdf$/i.test(f.name) || f.type === "application/pdf");
+  const texts = files.filter(f => /\.(csv|tsv|txt|md|json)$/i.test(f.name));
+  if (pdfs.length) {
+    goToTab("p-pdf");
+    toast("Reading " + pdfs.length + " PDF" + (pdfs.length === 1 ? "" : "s") + "...");
+    return handlePDFs(pdfs);
+  }
+  if (texts.length) {
+    goToTab("p-paste");
+    const parts = [];
+    for (const f of texts) parts.push(await f.text());
+    document.getElementById("pasteInput").value = parts.join("\n");
+    document.getElementById("pasteBtn").click();
+    return toast("Loaded " + texts.map(f => f.name).join(", ") + ".", "ok");
+  }
+  toast("I can read PDFs and text files (.csv, .tsv, .txt). For a Word or Excel file, open it, copy the table, and paste it here.", "err");
+}
+
+(function globalDrop() {
+  const veil = document.getElementById("dropVeil");
+  let depth = 0;
+  const hasFiles = e => [...(e.dataTransfer?.types || [])].includes("Files");
+  window.addEventListener("dragenter", e => {
+    if (!hasFiles(e)) return;
+    depth++; veil.classList.add("on");
+  });
+  window.addEventListener("dragleave", () => { if (--depth <= 0) { depth = 0; veil.classList.remove("on"); } });
+  // must cancel dragover, otherwise the browser refuses the drop
+  window.addEventListener("dragover", e => { if (hasFiles(e)) e.preventDefault(); });
+  window.addEventListener("drop", e => {
+    depth = 0; veil.classList.remove("on");
+    // the PDF zone and the paste box handle their own drops; don't double-handle
+    if (e.defaultPrevented) return;
+    if (!hasFiles(e)) return;
+    e.preventDefault();               // without this the browser navigates away and the work is lost
+    routeFiles(e.dataTransfer.files);
+  });
+})();
+
+/* Enter submits, wherever you are */
+document.getElementById("urlInput").addEventListener("keydown", e => {
+  if (e.key === "Enter") { e.preventDefault(); document.getElementById("urlBtn").click(); }
+});
+document.getElementById("keywordInput").addEventListener("keydown", e => {
+  if (e.key === "Enter") { e.preventDefault(); document.getElementById("keywordBtn").click(); }
+});
+document.getElementById("pasteInput").addEventListener("keydown", e => {
+  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); document.getElementById("pasteBtn").click(); }
+});
+
+document.getElementById("resetBtn").addEventListener("click", () => {
+  if (!confirm("Clear the table and start again? Anything you have not downloaded will be lost.")) return;
+  tables = []; hist = []; hiddenCols.clear(); sortState = {col: null, dir: 1}; filterText = "";
+  ["pasteInput", "findInput", "urlInput", "keywordInput", "filterInput"].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = "";
+  });
+  ["urlStatus", "pdfStatus", "pasteStatus", "findStatus"].forEach(id => setStatus(id, ""));
+  document.getElementById("result").style.display = "none";
+  document.getElementById("colBox").style.display = "none";
+  window.scrollTo({top: 0, behavior: "smooth"});
+  toast("Cleared. Ready for the next one.", "ok");
 });
 
 function parseCSVLine(line) {
