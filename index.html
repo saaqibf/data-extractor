@@ -132,6 +132,11 @@
 <body>
 <div id="dropVeil">Drop it anywhere<small>PDFs go to the PDF reader. CSV, TSV and text files load into the paste box. Nothing is uploaded anywhere.</small></div>
 <div id="toast"></div>
+<div id="restoreBar" style="display:none;background:#fff4e3;border-bottom:2px solid var(--orange);padding:12px 20px;font-size:0.9rem;text-align:center;">
+  <span id="restoreMsg"></span>
+  <button id="restoreYes" class="tbtn" style="margin-left:10px;border-color:var(--orange);color:var(--orange)">Bring it back</button>
+  <button id="restoreNo" class="tbtn">No thanks</button>
+</div>
 <header>
   <svg viewBox="0 0 120 120" width="34" height="34" style="flex:none"><circle cx="60" cy="62" r="40" fill="none" stroke="#fff" stroke-width="8"/><g fill="none" stroke="#fff" stroke-width="6" stroke-linecap="round"><path d="M60 42c-7-7-19-4-21 5-8 1-12 9-8 16-4 6 0 15 8 16 3 8 14 10 21 4"/><path d="M60 42c7-7 19-4 21 5 8 1 12 9 8 16 4 6 0 15-8 16-3 8-14 10-21 4"/><path d="M60 42v41"/></g><path d="M96 20l4.5 9.5L110 34l-9.5 4.5L96 48l-4.5-9.5L82 34l9.5-4.5z" fill="#F7901E"/></svg>
   <h1>MindFuel Data Extractor</h1>
@@ -145,7 +150,7 @@
       <button onclick="document.getElementById('howto').style.display='none'" style="border:none;background:none;color:var(--purple);font-weight:700;cursor:pointer;">hide ✕</button>
     </div>
     <ol style="margin:10px 0 4px 18px;font-size:0.9rem;line-height:1.7;">
-      <li><b>Get your data in:</b> drag a PDF or a CSV anywhere onto this page and it goes to the right place by itself. Or copy a table out of Excel or a website and paste it in "Paste anything." (The URL tab works on many sites; when one blocks it, the paste tab always works.)</li>
+      <li><b>Get your data in:</b> drag a <b>PDF, Excel, Word, CSV or text file</b> anywhere onto this page and it goes to the right place by itself. Or copy a table out of anything and paste it in "Paste anything." (The URL tab works on many sites; when one blocks it, the paste tab always works.)</li>
       <li><b>Check the table</b> that appears below.</li>
       <li><b>Click "Download CSV"</b> and open it in Excel or Google Sheets. Done.</li>
       <li><b>Messy table?</b> <b>🧹 Clean up</b> trims spaces and drops blank or duplicate rows. <b>🔁 Find &amp; replace</b> fixes a spelling everywhere at once. <b>✂️ Split a column</b> pulls "Full Name" apart into first and last. Click a heading to sort, click any cell to edit it, click the <b>✕</b> on a row to delete it, and <b>↶ Undo</b> reverses anything.</li>
@@ -155,7 +160,7 @@
   </div>
   <div class="tabs">
     <button class="tab active" data-panel="p-url">From a web page</button>
-    <button class="tab" data-panel="p-pdf">From a PDF</button>
+    <button class="tab" data-panel="p-pdf">From a file</button>
     <button class="tab" data-panel="p-paste">Paste anything</button>
     <button class="tab" data-panel="p-find">🔎 Find specific things</button>
   </div>
@@ -168,9 +173,9 @@
   </div>
 
   <div class="panel" id="p-pdf">
-    <p class="help">Drop one PDF or several at once. The extractor reads the text and rebuilds rows and columns. If the pages share the same columns it also builds a combined table, and if you drop several files it merges them and flags any duplicate rows. Works best on PDFs where the table is real text (most reports), not a scanned photo.</p>
-    <div class="drop" id="dropZone">Drop one or more PDFs here, or click to browse
-      <input type="file" id="pdfInput" accept="application/pdf" multiple style="display:none">
+    <p class="help">Drop files here, or anywhere on the page. <b>PDF</b>: reads the text and rebuilds rows and columns, stitching pages that share the same columns and merging across several files. <b>Excel</b>: opens every sheet, formulas come through as their answers. <b>Word</b>: pulls out any tables, plus the text. Also takes .csv and .txt. The only thing that will not work is a scanned photo of a page, because there is no text in it to read.</p>
+    <div class="drop" id="dropZone">Drop PDF, Excel, Word, CSV or text files here, or click to browse
+      <input type="file" id="pdfInput" accept=".pdf,.xlsx,.xlsm,.xls,.docx,.csv,.tsv,.txt" multiple style="display:none">
     </div>
     <div class="status" id="pdfStatus"></div>
   </div>
@@ -223,11 +228,12 @@
       <button class="tbtn" id="headerBtn" title="Use the first row as column names">⬆️ First row = headers</button>
       <button class="tbtn" id="colsBtn" title="Choose which columns to keep">▦ Columns</button>
       <button class="tbtn" id="fnrBtn" title="Change a word everywhere in the table at once">🔁 Find &amp; replace</button>
-      <button class="tbtn" id="splitBtn" title="Split one column into two, like Full Name into First and Last">✂️ Split a column</button>
+      <button class="tbtn" id="splitBtn" title="Split, combine, change case, or remove duplicate rows">🛠️ Column tools</button>
       <button class="tbtn" id="delBtn" title="Delete the rows currently showing">🗑️ Delete shown rows</button>
       <input type="search" id="filterInput" placeholder="🔍 Show only rows with..." title="Type to show only matching rows. Press Escape to clear." style="max-width:200px;padding:8px;font-size:0.85rem;">
       <button class="tbtn" id="undoBtn" title="Undo the last change">↶ Undo</button>
       <button class="tbtn" id="summaryBtn" title="Quick quality check of every column">📊 Column summary</button>
+      <button class="tbtn" id="addRowBtn" title="Add an empty row at the bottom">➕ Add row</button>
       <button class="tbtn" id="resetBtn" title="Clear everything and start again">✕ Start over</button>
       <span class="stat" id="stat"></span>
     </div>
@@ -436,11 +442,38 @@ function renderTable(i) {
       if (ri === 0) {
         cell.className = "sortable";
         const real = visibleCols()[ci];
-        cell.title = "Click to sort by this column";
+        cell.title = "Click to sort. Double-click to rename this column.";
         if (sortState.col === real) cell.textContent = c + (sortState.dir === 1 ? "  ▲" : "  ▼");
         cell.onclick = () => {
+          if (cell.isContentEditable) return;             // mid-rename, don't sort
           sortState = {col: real, dir: sortState.col === real ? -sortState.dir : 1};
           renderTable(curIdx());
+        };
+        // iteration 10: double-click to rename a column. Headers used to be read-only
+        // even though the split tool told her she could rename them.
+        cell.ondblclick = ev => {
+          ev.stopPropagation();
+          cell.textContent = c;                            // drop the ▲ / ▼ while editing
+          cell.contentEditable = "true";
+          cell.spellcheck = false;
+          cell.focus();
+          const r = document.createRange(); r.selectNodeContents(cell);
+          const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+          const finish = save => {
+            cell.contentEditable = "false";
+            const name = cell.textContent.trim();
+            if (save && name && name !== c) {
+              pushHist();
+              curRows()[0][real] = name;
+              toast("Column renamed to “" + name + "”.", "ok");
+            }
+            renderTable(curIdx());
+          };
+          cell.onblur = () => finish(true);
+          cell.onkeydown = k => {
+            if (k.key === "Enter") { k.preventDefault(); finish(true); }
+            if (k.key === "Escape") { k.preventDefault(); cell.onblur = null; finish(false); }
+          };
         };
       } else {
         cell.contentEditable = "true";
@@ -488,6 +521,7 @@ function renderTable(i) {
     tbl.appendChild(tr);
   });
   updateStat();
+  saveWork();          // debounced, so this is cheap even while typing
 }
 
 document.getElementById("cleanBtn").addEventListener("click", () => {
@@ -599,6 +633,66 @@ function splitColumn(rows, col, sep, limit) {
   return {rows: out, made};
 }
 
+/* ---- iteration 11: the things a contact list always needs ---- */
+
+/* Combine columns. First + Last -> Full Name. The inverse of split. */
+function combineColumns(rows, cols, sep, newName, keepOriginals) {
+  if (!rows.length || cols.length < 2) return {rows, ok: false};
+  // `at` is the leftmost selected column, so no selected column sits before it.
+  // That makes the insert position the same whether or not the originals are removed.
+  const at = Math.min(...cols);
+  const out = rows.map((r, ri) => {
+    const joined = ri === 0
+      ? (newName || cols.map(c => rows[0][c]).join(" "))
+      : cols.map(c => String(r[c] ?? "").trim()).filter(v => v !== "").join(sep);
+    const kept = keepOriginals ? r.slice() : r.filter((_, i) => !cols.includes(i));
+    kept.splice(at, 0, joined);
+    return kept;
+  });
+  return {rows: out, ok: true};
+}
+
+/* Title Case that survives real names: J. Smith, O'Brien, Mary-Jane, McDonald left alone */
+function changeCase(value, mode) {
+  const s = String(value ?? "");
+  if (mode === "upper") return s.toUpperCase();
+  if (mode === "lower") return s.toLowerCase();
+  if (mode === "trim")  return s.replace(/\s+/g, " ").trim();
+  if (mode === "title") {
+    return s.toLowerCase().replace(/(^|[\s\-'’(])([a-z])/g, (m, pre, ch) => pre + ch.toUpperCase())
+            .replace(/\bMc([a-z])/g, (m, ch) => "Mc" + ch.toUpperCase());
+  }
+  return s;
+}
+
+function applyCase(rows, col, mode) {
+  let n = 0;
+  for (let r = 1; r < rows.length; r++) {
+    const cols = col === null ? rows[r].map((_, i) => i) : [col];
+    cols.forEach(c => {
+      const out = changeCase(rows[r][c], mode);
+      if (out !== rows[r][c]) { rows[r][c] = out; n++; }
+    });
+  }
+  return n;
+}
+
+/* Same person twice? Keep the first, drop the rest. Case and spacing ignored. */
+function dedupeBy(rows, col) {
+  if (rows.length < 2) return {rows, removed: 0};
+  const seen = new Set();
+  const out = [rows[0]];
+  let removed = 0;
+  for (let r = 1; r < rows.length; r++) {
+    const key = String(rows[r][col] ?? "").trim().toLowerCase();
+    if (key === "") { out.push(rows[r]); continue; }   // blanks are not duplicates of each other
+    if (seen.has(key)) { removed++; continue; }
+    seen.add(key);
+    out.push(rows[r]);
+  }
+  return {rows: out, removed};
+}
+
 function closeBoxes() {
   document.getElementById("toolBox").style.display = "none";
   document.getElementById("colBox").style.display = "none";
@@ -643,13 +737,34 @@ document.getElementById("fnrBtn").addEventListener("click", () => {
   document.getElementById("fnrFrom").focus();
 });
 
-document.getElementById("splitBtn").addEventListener("click", () => {
-  if (!tables.length) return toast("Extract a table first.", "err");
+/* One panel, four jobs. Keeping these together stops the toolbar growing forever
+   and puts every "reshape a column" task in the same place. (iteration 11) */
+const COLUMN_TOOLS = {
+  split:   {label: "Split one column into several", render: renderSplit},
+  combine: {label: "Combine columns into one", render: renderCombine},
+  case:    {label: "Fix capitalisation and spacing", render: renderCase},
+  dedupe:  {label: "Remove duplicate rows", render: renderDedupe},
+};
+
+function toolHeader(current) {
+  return "<b style='color:var(--purple)'>Column tools</b> " +
+    "<select id='ctMode' style='margin-left:8px'>" +
+    Object.entries(COLUMN_TOOLS).map(([k, v]) =>
+      "<option value='" + k + "'" + (k === current ? " selected" : "") + ">" + v.label + "</option>").join("") +
+    "</select>";
+}
+
+function openColumnTool(mode) {
   const box = document.getElementById("toolBox");
-  if (box.dataset.mode === "split" && box.style.display === "block") return closeBoxes();
-  box.dataset.mode = "split";
-  box.innerHTML =
-    "<b style='color:var(--purple)'>Split a column into several</b>" +
+  box.dataset.mode = "ct:" + mode;
+  box.innerHTML = toolHeader(mode) + "<div id='ctBody'></div>";
+  box.style.display = "block";
+  COLUMN_TOOLS[mode].render(document.getElementById("ctBody"));
+  document.getElementById("ctMode").onchange = e => openColumnTool(e.target.value);
+}
+
+function renderSplit(el) {
+  el.innerHTML =
     "<div class='fields'>" +
       "<label>Split <select id='spCol'>" + colOptions(false) + "</select></label>" +
       "<label>at each <select id='spSep'>" +
@@ -661,8 +776,7 @@ document.getElementById("splitBtn").addEventListener("click", () => {
       "<label>into at most <select id='spLimit'><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option></select> columns</label>" +
       "<button class='go' id='spGo'>Split it</button>" +
     "</div>" +
-    "<div class='hint'>Use this for a stuck column like <i>Full Name</i> into first and last, or <i>Name &lt;email&gt;</i> into two. <b>↶ Undo</b> reverses it.</div>";
-  box.style.display = "block";
+    "<div class='hint'>For a stuck column like <i>Full Name</i> into first and last, or <i>Name &lt;email&gt;</i> into two.</div>";
   document.getElementById("spSep").onchange = e => {
     document.getElementById("spCustom").style.display = e.target.value === "__custom__" ? "inline-block" : "none";
   };
@@ -677,8 +791,85 @@ document.getElementById("splitBtn").addEventListener("click", () => {
     tables[curIdx()].rows = res.rows;
     resetView();
     renderTable(curIdx());
-    toast("Split into " + res.made + " columns. Rename them by typing in the header row, or hide the ones you do not need with ▦ Columns.", "ok");
+    toast("Split into " + res.made + " columns. Double-click a heading to rename it.", "ok");
   };
+}
+
+function renderCombine(el) {
+  const head = curRows()[0] || [];
+  el.innerHTML =
+    "<div class='hint' style='margin-top:6px'>Tick the columns to join, left to right.</div>" +
+    "<div style='margin:8px 0'>" + head.map((h, i) =>
+      "<label style='display:inline-block;margin:4px 14px 4px 0'><input type='checkbox' class='cbCol' value='" + i + "'> " +
+      esc(h || "column " + (i + 1)) + "</label>").join("") + "</div>" +
+    "<div class='fields'>" +
+      "<label>joined by <select id='cbSep'>" +
+        "<option value=' '>a space</option><option value=', '>comma and space</option>" +
+        "<option value=' - '>dash</option><option value=''>nothing</option></select></label>" +
+      "<label>new name <input type='text' id='cbName' placeholder='e.g. Full Name'></label>" +
+      "<label><input type='checkbox' id='cbKeep'> keep the originals too</label>" +
+      "<button class='go' id='cbGo'>Combine</button>" +
+    "</div>" +
+    "<div class='hint'>First + Last into <i>Full Name</i>, or Address + City + Postal into one mailing line. Blank values are skipped, so nobody ends up as \"Smith ,\".</div>";
+  document.getElementById("cbGo").onclick = () => {
+    const cols = [...document.querySelectorAll(".cbCol:checked")].map(c => +c.value).sort((a, b) => a - b);
+    if (cols.length < 2) return toast("Tick at least two columns to join.", "err");
+    pushHist();
+    const res = combineColumns(curRows(), cols, document.getElementById("cbSep").value,
+      document.getElementById("cbName").value.trim(), document.getElementById("cbKeep").checked);
+    if (!res.ok) { hist.pop(); return toast("Could not combine those.", "err"); }
+    tables[curIdx()].rows = res.rows;
+    resetView();
+    renderTable(curIdx());
+    toast("Combined " + cols.length + " columns into one.", "ok");
+  };
+}
+
+function renderCase(el) {
+  el.innerHTML =
+    "<div class='fields'>" +
+      "<label>In <select id='caCol'>" + colOptions(true) + "</select></label>" +
+      "<label>make it <select id='caMode'>" +
+        "<option value='title'>Title Case (Sabina Bauer Lewis)</option>" +
+        "<option value='lower'>lower case (for email addresses)</option>" +
+        "<option value='upper'>UPPER CASE</option>" +
+        "<option value='trim'>just tidy the spacing</option></select></label>" +
+      "<button class='go' id='caGo'>Apply</button>" +
+    "</div>" +
+    "<div class='hint'>Title Case understands real names: <i>o'brien</i> becomes <i>O'Brien</i>, <i>mary-jane</i> becomes <i>Mary-Jane</i>, <i>mcdonald</i> becomes <i>McDonald</i>.</div>";
+  document.getElementById("caGo").onclick = () => {
+    const v = document.getElementById("caCol").value;
+    pushHist();
+    const n = applyCase(curRows(), v === "" ? null : +v, document.getElementById("caMode").value);
+    renderTable(curIdx());
+    toast(n ? "Changed " + n + " cell" + (n === 1 ? "" : "s") + "." : "Everything was already formatted that way.", n ? "ok" : "err");
+  };
+}
+
+function renderDedupe(el) {
+  el.innerHTML =
+    "<div class='fields'>" +
+      "<label>Keep one row per <select id='dupCol'>" + colOptions(false) + "</select></label>" +
+      "<button class='go' id='dupGo'>Remove the duplicates</button>" +
+    "</div>" +
+    "<div class='hint'>Keeps the first row for each value and drops the rest. Upper and lower case count as the same, so <i>SBL@mindfuel.ca</i> and <i>sbl@mindfuel.ca</i> are one person. Blank cells are left alone.</div>";
+  document.getElementById("dupGo").onclick = () => {
+    const col = +document.getElementById("dupCol").value;
+    const res = dedupeBy(curRows(), col);
+    if (!res.removed) return toast("No duplicates in that column, every value is already unique.", "err");
+    pushHist();
+    tables[curIdx()].rows = res.rows;
+    resetView();
+    renderTable(curIdx());
+    toast("Removed " + res.removed + " duplicate row" + (res.removed === 1 ? "" : "s") + ", keeping the first of each. ↶ Undo brings them back.", "ok");
+  };
+}
+
+document.getElementById("splitBtn").addEventListener("click", () => {
+  if (!tables.length) return toast("Extract a table first.", "err");
+  const box = document.getElementById("toolBox");
+  if ((box.dataset.mode || "").startsWith("ct:") && box.style.display === "block") return closeBoxes();
+  openColumnTool("split");
 });
 
 document.getElementById("delBtn").addEventListener("click", () => {
@@ -699,24 +890,53 @@ document.getElementById("delBtn").addEventListener("click", () => {
 });
 
 /* ================= column summary (iteration 5) ================= */
+/* iteration 12: for a grant report the first question is always "what does it add up to",
+   so number columns now carry their total, average and range. */
+function toNumber(v) {
+  const s = String(v ?? "").replace(/[$,%\s]/g, "").replace(/^\((.*)\)$/, "-$1");   // (500) means -500
+  if (s === "" || !/^-?\d*\.?\d+$/.test(s)) return null;
+  return parseFloat(s);
+}
+
+function tidyNum(n) {
+  if (!isFinite(n)) return "";
+  const r = Math.round(n * 100) / 100;
+  return r.toLocaleString("en-CA", {maximumFractionDigits: 2});
+}
+
 function columnSummary(rows) {
   const head = rows[0] || [], body = rows.slice(1);
-  const out = [["Column", "Filled", "Empty", "Unique values", "Looks like"]];
+  const out = [["Column", "Filled", "Empty", "Unique values", "Looks like", "Total", "Average", "Smallest", "Largest"]];
   head.forEach((name, c) => {
     const vals = body.map(r => String(r[c] ?? "").trim());
     const filled = vals.filter(v => v !== "");
     const uniq = new Set(filled).size;
-    const isNum = v => v !== "" && !isNaN(parseFloat(v.replace(/[$,%\s]/g, "")));
     const isEmail = v => /^[^@\s]+@[^@\s]+\.[A-Za-z]{2,}$/.test(v);
     const isDate = v => /^\d{4}-\d{2}-\d{2}$/.test(v) || /^\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4}$/.test(v);
     const share = f => filled.length ? filled.filter(f).length / filled.length : 0;
+    const nums = filled.map(toNumber).filter(n => n !== null);
+    // majority rules: one stray "not recorded" among the amounts should not stop the column
+    // being totalled, which is the whole reason she opened the summary
+    const numeric = filled.length ? nums.length / filled.length > 0.5 : false;
+
     let kind = "text";
     if (share(isEmail) > 0.7) kind = "email";
     else if (share(isDate) > 0.7) kind = "date";
-    else if (share(isNum) > 0.7) kind = "number";
+    else if (numeric) kind = "number";
     if (filled.length && uniq === filled.length) kind += " · all unique";
     else if (filled.length && uniq <= 5) kind += " · " + uniq + " categories";
-    out.push([name || "column " + (c + 1), String(filled.length), String(vals.length - filled.length), String(uniq), kind]);
+
+    // dates and years are numbers, but totalling them is meaningless
+    const worthTotalling = numeric && kind.startsWith("number") && nums.length > 0;
+    const sum = worthTotalling ? nums.reduce((a, b) => a + b, 0) : null;
+    out.push([
+      name || "column " + (c + 1),
+      String(filled.length), String(vals.length - filled.length), String(uniq), kind,
+      worthTotalling ? tidyNum(sum) : "",
+      worthTotalling ? tidyNum(sum / nums.length) : "",
+      worthTotalling ? tidyNum(Math.min(...nums)) : "",
+      worthTotalling ? tidyNum(Math.max(...nums)) : "",
+    ]);
   });
   return out;
 }
@@ -1235,6 +1455,142 @@ document.getElementById("keywordBtn").addEventListener("click", () => {
   setStatus("findStatus", "Found " + (rows.length - 1) + " line(s) containing \"" + kw + "\". Scroll down, then Download CSV.");
 });
 
+/* ================= iteration 12: your work survives closing the tab =================
+   Saved only in this browser, on this computer. It never travels anywhere. */
+const SAVE_KEY = "mindfuel-extractor-work-v1";
+const SAVE_LIMIT = 3000000;   // characters; well under the browser's ~5MB per-site allowance
+let _saveTimer = null;
+
+function saveWork() {
+  clearTimeout(_saveTimer);
+  _saveTimer = setTimeout(() => {
+    try {
+      if (!tables.length) return localStorage.removeItem(SAVE_KEY);
+      const s = JSON.stringify({when: Date.now(), tables});
+      if (s.length > SAVE_LIMIT) return localStorage.removeItem(SAVE_KEY);  // too big to keep; silently skip
+      localStorage.setItem(SAVE_KEY, s);
+    } catch (e) { /* private browsing or storage full: not worth interrupting her for */ }
+  }, 600);
+}
+
+function readSaved() {
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (!raw) return null;
+    const o = JSON.parse(raw);
+    return (o && Array.isArray(o.tables) && o.tables.length) ? o : null;
+  } catch (e) { return null; }
+}
+
+function howLongAgo(ms) {
+  const mins = Math.round((Date.now() - ms) / 60000);
+  if (mins < 1) return "a moment ago";
+  if (mins < 60) return mins + " minute" + (mins === 1 ? "" : "s") + " ago";
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return hrs + " hour" + (hrs === 1 ? "" : "s") + " ago";
+  const days = Math.round(hrs / 24);
+  return days + " day" + (days === 1 ? "" : "s") + " ago";
+}
+
+(function offerRestore() {
+  const saved = readSaved();
+  if (!saved) return;
+  const rowCount = saved.tables.reduce((n, t) => n + Math.max(0, t.rows.length - 1), 0);
+  document.getElementById("restoreMsg").textContent =
+    "You were working on " + saved.tables[0].name + " (" + rowCount + " rows) " + howLongAgo(saved.when) + ".";
+  document.getElementById("restoreBar").style.display = "block";
+  document.getElementById("restoreYes").onclick = () => {
+    document.getElementById("restoreBar").style.display = "none";
+    showTables(saved.tables, "your saved work");
+    toast("Brought back " + saved.tables.length + " table" + (saved.tables.length === 1 ? "" : "s") + ".", "ok");
+  };
+  document.getElementById("restoreNo").onclick = () => {
+    localStorage.removeItem(SAVE_KEY);
+    document.getElementById("restoreBar").style.display = "none";
+  };
+})();
+
+/* ================= iteration 10: Excel and Word files go straight in =================
+   The readers are fetched only the first time one is needed, so the tool still opens
+   and works with no internet if all she is doing is pasting. */
+const CDN = {
+  xlsx: "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js",
+  docx: "https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js",
+};
+
+function loadScript(src) {
+  return new Promise((ok, no) => {
+    const s = document.createElement("script");
+    s.src = src;
+    s.onload = () => ok();
+    s.onerror = () => no(new Error("could not load " + src));
+    document.head.appendChild(s);
+  });
+}
+
+async function handleSpreadsheets(files) {
+  try {
+    if (!window.XLSX) { setStatus("pasteStatus", "Getting the spreadsheet reader (first time only)..."); await loadScript(CDN.xlsx); }
+  } catch (e) {
+    return setStatus("pasteStatus", "Could not fetch the spreadsheet reader, which needs internet the first time. Open the file in Excel, copy the table, and paste it here instead.", true);
+  }
+  const out = [];
+  for (const file of files) {
+    try {
+      const wb = window.XLSX.read(await file.arrayBuffer(), {type: "array"});
+      wb.SheetNames.forEach(sheet => {
+        const rows = window.XLSX.utils.sheet_to_json(wb.Sheets[sheet], {header: 1, raw: false, defval: ""})
+          .map(r => r.map(c => String(c ?? "").trim()));
+        const real = rows.filter(r => r.some(c => c !== ""));
+        if (real.length) out.push({
+          name: (files.length > 1 ? file.name + " — " : "") + sheet,
+          rows: real,
+        });
+      });
+    } catch (e) {
+      setStatus("pasteStatus", "Could not read " + file.name + ": " + e.message, true);
+    }
+  }
+  if (!out.length) return setStatus("pasteStatus", "That spreadsheet has no data in it.", true);
+  showTables(out, files.length === 1 ? files[0].name : files.length + " spreadsheets");
+  const sheets = out.length;
+  setStatus("pasteStatus", "Read " + sheets + " sheet" + (sheets === 1 ? "" : "s") +
+    ". Pick the one you want in the Viewing dropdown. Formulas come through as their answers, not the formula.");
+}
+
+async function handleWordDocs(files) {
+  try {
+    if (!window.mammoth) { setStatus("pasteStatus", "Getting the Word reader (first time only)..."); await loadScript(CDN.docx); }
+  } catch (e) {
+    return setStatus("pasteStatus", "Could not fetch the Word reader, which needs internet the first time. Open the document, copy the table, and paste it here instead.", true);
+  }
+  let tablesFound = [];
+  let text = [];
+  for (const file of files) {
+    try {
+      const res = await window.mammoth.convertToHtml({arrayBuffer: await file.arrayBuffer()});
+      const found = parseHTMLTables(res.value);
+      found.forEach((t, i) => tablesFound.push({name: file.name + (found.length > 1 ? " table " + (i + 1) : ""), rows: t.rows}));
+      text.push("=== " + file.name + " ===\n" + htmlToText(res.value));
+    } catch (e) {
+      setStatus("pasteStatus", "Could not read " + file.name + ": " + e.message, true);
+    }
+  }
+  const joined = text.join("\n\n");
+  const fi = document.getElementById("findInput"); if (fi && joined.trim()) fi.value = joined;
+  if (tablesFound.length) {
+    showTables(tablesFound, files.length === 1 ? files[0].name : files.length + " Word documents");
+    return setStatus("pasteStatus", "Found " + tablesFound.length + " table" + (tablesFound.length === 1 ? "" : "s") +
+      " in Word. The document text is in the 🔎 Find tab too, so you can pull emails or amounts out of it.");
+  }
+  if (joined.trim()) {
+    const lines = joined.split(/\n/).filter(l => l.trim());
+    showTables([{name: "Document text", rows: [["Line", "Text"]].concat(lines.map((l, i) => [String(i + 1), l.trim()]))}], files[0].name);
+    return setStatus("pasteStatus", "No table in that document, so here is the text line by line. It is also in the 🔎 Find tab.");
+  }
+  setStatus("pasteStatus", "That document appears to be empty.", true);
+}
+
 /* ================= iteration 6: drop a file anywhere, keyboard, start over ================= */
 
 function goToTab(panelId) {
@@ -1246,12 +1602,24 @@ function goToTab(panelId) {
 async function routeFiles(fileList) {
   const files = [...(fileList || [])];
   if (!files.length) return;
-  const pdfs = files.filter(f => /\.pdf$/i.test(f.name) || f.type === "application/pdf");
-  const texts = files.filter(f => /\.(csv|tsv|txt|md|json)$/i.test(f.name));
+  const pdfs   = files.filter(f => /\.pdf$/i.test(f.name) || f.type === "application/pdf");
+  const sheets = files.filter(f => /\.(xlsx|xlsm|xls)$/i.test(f.name));
+  const words  = files.filter(f => /\.docx$/i.test(f.name));
+  const texts  = files.filter(f => /\.(csv|tsv|txt|md|json)$/i.test(f.name));
   if (pdfs.length) {
     goToTab("p-pdf");
     toast("Reading " + pdfs.length + " PDF" + (pdfs.length === 1 ? "" : "s") + "...");
     return handlePDFs(pdfs);
+  }
+  if (sheets.length) {
+    goToTab("p-paste");
+    toast("Reading " + sheets.map(f => f.name).join(", ") + "...");
+    return handleSpreadsheets(sheets);
+  }
+  if (words.length) {
+    goToTab("p-paste");
+    toast("Reading " + words.map(f => f.name).join(", ") + "...");
+    return handleWordDocs(words);
   }
   if (texts.length) {
     goToTab("p-paste");
@@ -1261,7 +1629,10 @@ async function routeFiles(fileList) {
     document.getElementById("pasteBtn").click();
     return toast("Loaded " + texts.map(f => f.name).join(", ") + ".", "ok");
   }
-  toast("I can read PDFs and text files (.csv, .tsv, .txt). For a Word or Excel file, open it, copy the table, and paste it here.", "err");
+  if (files.some(f => /\.(doc|xlsb|pages|numbers|key)$/i.test(f.name))) {
+    return toast("That is an older or Apple format I cannot open. In its own app choose File, Save As, and pick .docx or .xlsx, then drop that here.", "err");
+  }
+  toast("I can read PDF, Excel, Word, and text files. For anything else, copy the table and paste it in the Paste anything tab.", "err");
 }
 
 (function globalDrop() {
@@ -1296,8 +1667,23 @@ document.getElementById("pasteInput").addEventListener("keydown", e => {
   if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); document.getElementById("pasteBtn").click(); }
 });
 
+document.getElementById("addRowBtn").addEventListener("click", () => {
+  if (!tables.length) return toast("Extract a table first.", "err");
+  pushHist();
+  const width = (curRows()[0] || []).length || 1;
+  curRows().push(Array(width).fill(""));
+  filterText = ""; document.getElementById("filterInput").value = "";
+  sortState = {col: null, dir: 1};      // otherwise the new blank row sorts away from the bottom
+  renderTable(curIdx());
+  const rows = document.querySelectorAll("#outTable tr");
+  const last = rows[rows.length - 1];
+  if (last) { last.scrollIntoView({block: "nearest"}); const c = last.children[1]; if (c) c.focus(); }
+  toast("Empty row added at the bottom. Click a cell to type in it.", "ok");
+});
+
 document.getElementById("resetBtn").addEventListener("click", () => {
   if (!confirm("Clear the table and start again? Anything you have not downloaded will be lost.")) return;
+  try { localStorage.removeItem(SAVE_KEY); } catch (e) {}
   tables = []; hist = []; hiddenCols.clear(); sortState = {col: null, dir: 1}; filterText = "";
   ["pasteInput", "findInput", "urlInput", "keywordInput", "filterInput"].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = "";
